@@ -1,7 +1,7 @@
 module ODBCAdapter
   class ColumnMetadata
     GENERICS = {
-      primary_key: [ODBC::SQL_INTEGER, ODBC::SQL_SMALLINT],
+      primary_key: [ODBC::SQL_INTEGER, ODBC::SQL_SMALLINT, ODBC::SQL_BIGINT],
       string:      [ODBC::SQL_VARCHAR],
       text:        [ODBC::SQL_LONGVARCHAR, ODBC::SQL_VARCHAR],
       integer:     [ODBC::SQL_INTEGER, ODBC::SQL_SMALLINT],
