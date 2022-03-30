@@ -83,7 +83,16 @@ module ODBCAdapter
                       when [ODBC::SQL_CHAR, ODBC::SQL_VARCHAR, ODBC::SQL_LONGVARCHAR].include?(column.type)
                         # Do nothing, because the data defaults to strings
                         # This also covers null values, as they are VARCHARs of length 0
-                        value.is_a?(String) ? value.force_encoding("UTF-8") : value
+                        if value.is_a?(String)
+                          # if the 1st character is a '[' try to parse as an array
+                          if value[0] == "["
+                            JSON.parse(value) rescue value.force_encoding("UTF-8")
+                          else
+                            value.force_encoding("UTF-8")
+                          end
+                        else
+                          value
+                        end
                       when [ODBC::SQL_DECIMAL, ODBC::SQL_NUMERIC].include?(column.type)
                         column.scale == 0 ? value.to_i : value.to_f
                       when [ODBC::SQL_REAL, ODBC::SQL_FLOAT, ODBC::SQL_DOUBLE].include?(column.type)
@@ -98,8 +107,8 @@ module ODBCAdapter
                         value.to_time
                       when [ODBC::SQL_DATETIME, ODBC::SQL_TIMESTAMP].include?(column.type)
                         value.to_datetime
-                      # when ["ARRAY"?, "OBJECT"?, "VARIANT"?].include?(column.type)
-                        # TODO: "ARRAY", "OBJECT", "VARIANT" all return as VARCHAR
+                      # when ["OBJECT"?, "VARIANT"?].include?(column.type)
+                        # TODO: "OBJECT", "VARIANT" all return as VARCHAR
                         # so we'd need to parse them to make them the correct type
 
                         # As of now, we are just going to return the value as a string
