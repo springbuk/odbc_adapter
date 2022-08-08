@@ -5,8 +5,7 @@ module ActiveRecord
 
       def initialize(configuration)
         p "Original Configuration: ", configuration
-        # @configuration = configuration.merge(configuration[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h)
-        @configuration = ActiveRecord::Base.configurations.configs_for(name: "snowflake_springbuk", env_name: "test")
+        @configuration = configuration.merge(configuration[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h)
         p "Merged Configuration: ", @configuration
       end
 
