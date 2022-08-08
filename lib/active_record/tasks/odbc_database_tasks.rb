@@ -19,6 +19,12 @@ module ActiveRecord
         end
       end
 
+      private
+
+      def configuration
+        @configuration
+      end
+
       ActiveRecord::Tasks::DatabaseTasks.register_task(/odbc/, ActiveRecord::Tasks::ODBCDatabaseTasks)
     end
   end
