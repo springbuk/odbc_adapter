@@ -4,8 +4,9 @@ module ActiveRecord
       delegate :connection, :establish_connection, to: ActiveRecord::Base
 
       def initialize(configuration)
-        p configuration
-        @configuration = configuration
+        p "Original Configuration: ", configuration
+        @configuration = configuration.merge(configuration[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h)
+        p "Merged Configuration: ", @configuration
       end
 
       def create
