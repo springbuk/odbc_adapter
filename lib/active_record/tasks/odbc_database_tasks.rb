@@ -4,12 +4,13 @@ module ActiveRecord
       delegate :connection, :establish_connection, to: ActiveRecord::Base
 
       def initialize(configuration)
+        p configuration
         @configuration = configuration
       end
 
       def create
-        connection.create_database configuration['database']
         establish_connection configuration
+        connection.create_database configuration['database']
 
       rescue ActiveRecord::StatementInvalid => error
         if /Database .* already exists/ === error.message
