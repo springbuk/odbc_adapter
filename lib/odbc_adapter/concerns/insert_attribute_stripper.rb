@@ -29,7 +29,6 @@ module ODBCAdapter
                 self[column.name] = nil
               end
             end
-            if stripped_attributes.any? then generate_id end
           else
             stripped_attributes = {}
           end
