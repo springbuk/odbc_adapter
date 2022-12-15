@@ -1,7 +1,6 @@
 module ODBCAdapter
   module InsertAttributeStripper
     extend ActiveSupport::Concern
-    include EasyIdentified
 
     included do
       alias_method :pre_insert_attribute_stripper_save, :save
@@ -33,6 +32,7 @@ module ODBCAdapter
             stripped_attributes = {}
           end
           first_call_result = base_function.call(**options, &block)
+          return false if first_call_result == false
           if stripped_attributes.any?
             restore_stripped_attributes(stripped_attributes)
             return base_function.call(**options, &block)
