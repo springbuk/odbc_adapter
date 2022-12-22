@@ -23,7 +23,7 @@ module ODBCAdapter
         # errors normally for an invalid record. We then disable validations during the initial save, because we'll
         # often be saving a technically invalid record as we've stripped off required elements.
         unless options[:validate] == false || valid?
-          raise_validation_error
+          return base_function.call(**temp_options, &block)
         end
         self.class.transaction do
           if new_record?
