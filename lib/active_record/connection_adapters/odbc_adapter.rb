@@ -202,8 +202,8 @@ module ActiveRecord
       # work with non-string keys, and in our case the keys are (almost) all
       # numeric
       def alias_type(map, new_type, old_type)
-        map.register_type(new_type) do |_, *args|
-          map.lookup(old_type, *args)
+        map.register_type(new_type) do |_|
+          map.lookup(old_type)
         end
       end
 
