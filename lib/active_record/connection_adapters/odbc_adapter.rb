@@ -155,6 +155,19 @@ module ActiveRecord
         exec_query("SELECT #{table_name}.NEXTVAL as new_id").first["new_id"]
       end
 
+      def build_merge_sql(merge) # :nodoc:
+        <<~SQL
+          MERGE #{merge.into} AS TARGET USING (#{merge.values_list}) AS SOURCE ON #{merge.match}
+          #{merge.merge_delete}
+          #{merge.merge_update}
+          #{merge.merge_insert}
+        SQL
+      end
+
+      def exec_merge_all(sql, name) # :nodoc:
+        exec_query(sql, name)
+      end
+
       protected
 
       #Snowflake ODBC Adapter specific
