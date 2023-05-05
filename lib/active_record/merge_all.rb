@@ -7,7 +7,7 @@ module ActiveRecord
     attr_reader :model, :connection, :merges, :keys
     attr_reader :perform_inserts, :perform_updates, :delete_keys
 
-    def initialize(model, merges, perform_inserts: true, perform_updates: true, delete_keys: [])
+    def initialize(model, merges, perform_inserts: true, perform_updates: true, delete_keys: [], prune_duplicates: false)
       raise ArgumentError, "Empty list of attributes passed" if merges.blank?
 
       @model, @connection, @merges, @keys = model, model.connection, merges, merges.first.keys.map(&:to_s)
@@ -20,6 +20,10 @@ module ActiveRecord
       @keys = @keys.to_set
 
       ensure_valid_options_for_connection!
+
+      if prune_duplicates
+        do_prune_duplicates
+      end
     end
 
     def execute
@@ -67,6 +71,15 @@ module ActiveRecord
 
     def ensure_valid_options_for_connection!
 
+    end
+
+    def do_prune_duplicates
+      unless primary_keys.to_set.subset?(keys)
+        raise ArgumentError, "Pruning duplicates requires presense of all primary keys in the merges"
+      end
+      @merges = merges.reverse.uniq do |merge|
+        primary_keys.map { |key| merge[key] }
+      end.reverse
     end
 
     def to_sql

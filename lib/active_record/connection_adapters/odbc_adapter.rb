@@ -172,20 +172,25 @@ module ActiveRecord
 
       #Snowflake ODBC Adapter specific
       def initialize_type_map(map)
-        map.register_type :boolean,               Type::Boolean.new
-        map.register_type :date,                  Type::Date.new
-        map.register_type :string,                Type::String.new
-        map.register_type :datetime,              Type::DateTime.new
-        map.register_type :time,                  Type::Time.new
-        map.register_type :binary,                Type::Binary.new
-        map.register_type :float,                 Type::Float.new
-        map.register_type :integer,               ::ODBCAdapter::Type::SnowflakeInteger.new
-        map.register_type(:decimal) do |_sql_type, column_data|
-          Type::Decimal.new(precision: column_data.precision, scale: column_data.scale)
+        map.register_type %r(boolean)i,               Type::Boolean.new
+        map.register_type %r(date)i,                  Type::Date.new
+        map.register_type %r(varchar)i,                Type::String.new
+        map.register_type %r(time)i,                  Type::Time.new
+        map.register_type %r(timestamp)i,              Type::DateTime.new
+        map.register_type %r(binary)i,                Type::Binary.new
+        map.register_type %r(double)i,                 Type::Float.new
+        map.register_type(%r(decimal)i) do |sql_type|
+          p sql_type
+          scale = extract_scale(sql_type)
+          if scale == 0
+            ::ODBCAdapter::Type::SnowflakeInteger.new
+          else
+            Type::Decimal.new(precision: extract_precision(sql_type), scale: scale)
+          end
         end
-        map.register_type :object,                ::ODBCAdapter::Type::SnowflakeObject.new
-        map.register_type :array,                 ::ODBCAdapter::Type::ArrayOfValues.new
-        map.register_type :variant,               ::ODBCAdapter::Type::Variant.new
+        map.register_type %r(struct)i,                ::ODBCAdapter::Type::SnowflakeObject.new
+        map.register_type %r(array)i,                 ::ODBCAdapter::Type::ArrayOfValues.new
+        map.register_type %r(variant)i,               ::ODBCAdapter::Type::Variant.new
       end
 
       # Translate an exception from the native DBMS to something usable by
