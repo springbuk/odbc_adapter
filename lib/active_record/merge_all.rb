@@ -77,9 +77,11 @@ module ActiveRecord
       unless primary_keys.to_set.subset?(keys)
         raise ArgumentError, "Pruning duplicates requires presense of all primary keys in the merges"
       end
-      @merges = merges.reverse.uniq do |merge|
+      @merges = merges.reverse
+      merges.uniq! do |merge|
         primary_keys.map { |key| merge[key] }
-      end.reverse
+      end
+      merges.reverse!
     end
 
     def to_sql
