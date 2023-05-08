@@ -180,7 +180,6 @@ module ActiveRecord
         map.register_type %r(binary)i,                Type::Binary.new
         map.register_type %r(double)i,                 Type::Float.new
         map.register_type(%r(decimal)i) do |sql_type|
-          p sql_type
           scale = extract_scale(sql_type)
           if scale == 0
             ::ODBCAdapter::Type::SnowflakeInteger.new
