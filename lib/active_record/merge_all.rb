@@ -5,13 +5,14 @@ require "active_support/core_ext/enumerable"
 module ActiveRecord
   class MergeAll # :nodoc:
     attr_reader :model, :connection, :merges, :keys
-    attr_reader :perform_inserts, :perform_updates, :delete_keys
+    attr_reader :perform_inserts, :perform_updates, :delete_key
 
-    def initialize(model, merges, perform_inserts: true, perform_updates: true, delete_keys: [], prune_duplicates: false)
+    def initialize(model, merges, perform_inserts: true, perform_updates: true, prune_duplicates: false)
       raise ArgumentError, "Empty list of attributes passed" if merges.blank?
 
+      # TODO: Implement perform_deletes. Most of the code is here, but all completely untested.
       @model, @connection, @merges, @keys = model, model.connection, merges, merges.first.keys.map(&:to_s)
-      @perform_inserts, @perform_updates, @delete_keys = perform_inserts, perform_updates, delete_keys.map(&:to_s)
+      @perform_inserts, @perform_updates, @delete_key = perform_inserts, perform_updates, nil
 
       if model.scope_attributes?
         @scope_attributes = model.scope_attributes
@@ -63,7 +64,7 @@ module ActiveRecord
     end
 
     def perform_deletes
-      !delete_keys.empty?
+      !delete_key.nil?
     end
 
     private
@@ -129,7 +130,7 @@ module ActiveRecord
       end
 
       def merge_delete
-        merge_all.perform_deletes ? "WHEN MATCHED AND #{quote_columns(merge_all.delete_keys).map { |column| "SOURCE.#{column} = TRUE"}.join(" AND ")} THEN DELETE" : ""
+        merge_all.perform_deletes ? "WHEN MATCHED AND SOURCE.#{quote_column(merge_all.delete_key)} = TRUE THEN DELETE" : ""
       end
 
       def merge_update
@@ -180,7 +181,11 @@ module ActiveRecord
       end
 
       def quote_columns(columns)
-        columns.map(&connection.method(:quote_column_name))
+        columns.map(&method(:quote_column))
+      end
+
+      def quote_column(column)
+        connection.quote_column_name(column)
       end
     end
   end
