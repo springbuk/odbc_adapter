@@ -35,11 +35,11 @@ module ActiveRecord
     end
 
     def updatable_columns
-      keys - readonly_columns - delete_keys
+      keys - readonly_columns - [delete_key]
     end
 
     def insertable_columns
-      keys - delete_keys
+      keys - [delete_key]
     end
 
     def insertable_non_primary_columns
