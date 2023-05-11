@@ -83,7 +83,7 @@ module ODBCAdapter
         col_nullable = nullability(col_name, col[17], col[10])
 
         # This section has been customized for Snowflake and will not work in general.
-        args = { sql_type: col_native_type, type: col_native_type, limit: col_limit }
+        args = { sql_type: construct_sql_type(col_native_type, col_limit, col_scale), type: col_native_type, limit: col_limit }
         args[:type] = case col_native_type
                       when "BOOLEAN" then :boolean
                       when "VARIANT" then :variant
@@ -175,6 +175,18 @@ module ODBCAdapter
         /^#{name.delete_prefix('"').delete_suffix('"')}$/
       else
         /^#{name}$/i
+      end
+    end
+
+    # Changes in rails 7 mean that we need all of the type information in the sql_type column
+    # This reconstructs sql types using limit (which is precision) and scale
+    def construct_sql_type(native_type, limit, scale)
+      if scale > 0
+        "#{native_type}(#{limit},#{scale})"
+      elsif limit > 0
+        "#{native_type}(#{limit})"
+      else
+        native_type
       end
     end
   end
