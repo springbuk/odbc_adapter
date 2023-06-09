@@ -10,7 +10,8 @@ module ODBCAdapter
     def execute(sql, name = nil, binds = [])
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
-        @connection.do(sql)
+        exec_sql = column_keyword_cleanup(sql)
+        @connection.do(exec_sql)
       end
     end
 
@@ -188,6 +189,16 @@ module ODBCAdapter
 
     def prepared_binds(binds)
       binds.map(&:value_for_database).map { |bind| _type_cast(bind) }
+    end
+
+    # Snowflake has issues with column names that are reserved words.  If instances are found, they can be "fixed" here when needed.
+    def column_keyword_cleanup(sql)
+      if sql.include? 'UPDATE cb_queries SET select ='
+        exec_sql = sql.dup
+        exec_sql.sub! 'UPDATE cb_queries SET select =', 'UPDATE cb_queries SET "SELECT" ='
+      else
+        sql
+      end
     end
   end
 end
