@@ -28,7 +28,6 @@ module ODBCAdapter
 
         values = dbms_type_cast(columns.values, values)
         column_names = columns.keys.map { |key| format_case(key) }
-        GC.start unless values.count < 10000
         ActiveRecord::Result.new(column_names, values)
       end
     end
