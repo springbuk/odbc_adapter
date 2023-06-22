@@ -62,27 +62,109 @@ module ODBCAdapter
       end
     end
 
+    def columns_test()
+      tables_query = <<~SQL
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_CATALOG = CURRENT_DATABASE() AND TABLE_SCHEMA = CURRENT_SCHEMA()
+      SQL
+      table_list = exec_query(tables_query)
+      ActiveRecord::Base.logger.debug("Retrieving columns for #{table_list.length} tables")
+      table_list.map.with_index do |record, index|
+        ActiveRecord::Base.logger.debug("Retrieving columns for #{record["table_name"]}, #{index+1} of #{table_list.length}")
+        columns(record["table_name"])
+      end
+      nil
+    end
+
+    # Extracts the value from a Snowflake column default definition.
+    def extract_value_from_default(default)
+      case default
+        # null
+      when nil
+        nil
+        # Quoted strings
+      when /\A[(B]?'(.*)'\z/m
+        $1.gsub("''", "'").gsub("\\\\","\\")
+        # Boolean types
+      when "TRUE"
+        puts "col_default: #{default.inspect}"
+        "true"
+      when "FALSE"
+        puts "col_default: #{default.inspect}"
+        "false"
+        # Numeric types
+      when /\A(-?\d+(\.\d*)?)\z/
+        $1
+      else
+        nil
+      end
+    end
+
+    def retrieve_column_data(table_name)
+      if @table_store == nil || @table_store[table_name] == nil
+        column_query = <<~SQL
+          SELECT TABLE_CATALOG,
+          TABLE_SCHEMA,
+          TABLE_NAME,
+          COLUMN_NAME,
+          COLUMN_DEFAULT,
+          CASE
+            WHEN DATA_TYPE = 'NUMBER' THEN 'DECIMAL'
+            WHEN DATA_TYPE like 'TIMESTAMP_%' THEN 'TIMESTAMP'
+            WHEN DATA_TYPE = 'TEXT' THEN 'VARCHAR'
+            WHEN DATA_TYPE = 'FLOAT' THEN 'DOUBLE'
+            ELSE DATA_TYPE
+          END AS DATA_TYPE,
+          CASE
+            WHEN DATA_TYPE like 'TIMESTAMP_%' THEN 35
+            WHEN DATA_TYPE = 'DATE' THEN 10
+            WHEN DATA_TYPE = 'FLOAT' THEN 38
+            WHEN DATA_TYPE = 'BOOLEAN' THEN 1
+            ELSE COALESCE(CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, 0)
+          END AS COLUMN_SIZE,
+          CASE
+            WHEN DATA_TYPE like 'TIMESTAMP_%' THEN DATETIME_PRECISION
+            ELSE COALESCE(NUMERIC_SCALE, 0)
+          END AS NUMERIC_SCALE,
+          IS_NULLABLE = 'YES' AS IS_NULLABLE
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_CATALOG = CURRENT_DATABASE() AND TABLE_SCHEMA = CURRENT_SCHEMA() AND TABLE_NAME = #{quote(native_case(table_name))}
+          ORDER BY ORDINAL_POSITION
+        SQL
+
+        logger = ActiveRecord::Base.logger.level
+        ActiveRecord::Base.logger.level = Logger::WARN
+        column_data ||= exec_query(column_query)
+        ActiveRecord::Base.logger.level = logger
+
+        @table_store = {}
+        column_data.each do | column |
+          @table_store[column["table_name"]] = [] unless @table_store.key?(column["table_name"])
+          @table_store[column["table_name"]].push(column)
+        end
+
+        p "Retrieved initial store"
+      end
+
+      @table_store[native_case(table_name.to_s)]
+    end
+
+
     # Returns an array of Column objects for the table specified by
     # +table_name+.
+    # This entire function has been customized for Snowflake and will not work in general.
     def columns(table_name, _name = nil)
-      stmt   = @connection.columns(native_case(table_name.to_s))
-      result = stmt.fetch_all || []
-      stmt.drop
+      result = retrieve_column_data(table_name)
 
-      db_regex = name_regex(current_database)
-      schema_regex = name_regex(current_schema)
       result.each_with_object([]) do |col, cols|
-        next unless col[0] =~ db_regex && col[1] =~ schema_regex
-        col_name        = col[3]  # SQLColumns: COLUMN_NAME
-        col_default     = col[12] # SQLColumns: COLUMN_DEF
-        col_native_type = col[5]  # SQLColumns: TYPE_NAME
-        col_limit       = col[6]  # SQLColumns: COLUMN_SIZE
-        col_scale       = col[8]  # SQLColumns: DECIMAL_DIGITS
+        col_name        = col["column_name"]
+        col_default     = extract_value_from_default(col["column_default"])
+        col_native_type = col["data_type"]
+        col_limit       = col["column_size"]
+        col_scale       = col["numeric_scale"]
+        col_nullable    = col["is_nullable"]
 
-        # SQLColumns: IS_NULLABLE, SQLColumns: NULLABLE
-        col_nullable = nullability(col_name, col[17], col[10])
-
-        # This section has been customized for Snowflake and will not work in general.
         args = { sql_type: construct_sql_type(col_native_type, col_limit, col_scale), type: col_native_type, limit: col_limit }
         args[:type] = case col_native_type
                       when "BOOLEAN" then :boolean
