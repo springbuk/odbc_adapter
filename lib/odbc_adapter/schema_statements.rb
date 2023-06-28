@@ -78,7 +78,7 @@ module ODBCAdapter
     end
 
     # Extracts the value from a Snowflake column default definition.
-    def extract_value_from_default(default)
+    def extract_default_from_snowflake(default)
       case default
         # null
       when nil
@@ -88,10 +88,8 @@ module ODBCAdapter
         $1.gsub("''", "'").gsub("\\\\","\\")
         # Boolean types
       when "TRUE"
-        puts "col_default: #{default.inspect}"
         "true"
       when "FALSE"
-        puts "col_default: #{default.inspect}"
         "false"
         # Numeric types
       when /\A(-?\d+(\.\d*)?)\z/
@@ -99,6 +97,46 @@ module ODBCAdapter
       else
         nil
       end
+    end
+
+    def extract_data_type_from_snowflake(snowflake_data_type)
+      case snowflake_data_type
+      when "NUMBER"
+        "DECIMAL"
+      when /\ATIMESTAMP_.*/
+        "TIMESTAMP"
+      when "TEXT"
+        "VARCHAR"
+      when "FLOAT"
+        "DOUBLE"
+      when "FIXED"
+        "DECIMAL"
+      when "REAL"
+        "DOUBLE"
+      else
+        snowflake_data_type
+      end
+    end
+
+    def extract_column_size_from_snowflake(type_information)
+      case type_information["type"]
+      when /\ATIMESTAMP_.*/
+        35
+      when "DATE"
+        10
+      when "FLOAT"
+        38
+      when "REAL"
+        38
+      when "BOOLEAN"
+        1
+      else
+        type_information["length"] || type_information["precision"] || 0
+      end
+    end
+
+    def extract_scale_from_snowflake(type_information)
+      type_information["scale"] || 0
     end
 
     def retrieve_column_data(table_name)
@@ -132,11 +170,51 @@ module ODBCAdapter
         ORDER BY ORDINAL_POSITION
       SQL
 
+      query_results_old = ActiveRecord::Base.logger.silence do
+        exec_query(column_query)
+      end
+
+      column_data_old = query_results_old.map do |query_result|
+        {
+          column_name: query_result["column_name"],
+          col_default: extract_default_from_snowflake(query_result["column_default"]),
+          col_native_type: query_result["data_type"],
+          column_size: query_result["column_size"],
+          numeric_scale: query_result["numeric_scale"],
+          is_nullable: query_result["is_nullable"]
+        }
+      end
+
+      column_query = "SHOW COLUMNS IN TABLE #{native_case(table_name)}"
+
       # Temporarily disable debug logging so we don't spam the log with table column queries
-      logger = ActiveRecord::Base.logger.level
-      ActiveRecord::Base.logger.level = Logger::WARN
-      column_data ||= exec_query(column_query)
-      ActiveRecord::Base.logger.level = logger
+      query_results = ActiveRecord::Base.logger.silence do
+       exec_query(column_query)
+      end
+
+      column_data = query_results.map do |query_result|
+        data_type_parsed = JSON.parse(query_result["data_type"])
+        {
+          column_name: query_result["column_name"],
+          col_default: extract_default_from_snowflake(query_result["default"]),
+          col_native_type: extract_data_type_from_snowflake(data_type_parsed["type"]),
+          column_size: extract_column_size_from_snowflake(data_type_parsed),
+          numeric_scale: extract_scale_from_snowflake(data_type_parsed),
+          is_nullable: data_type_parsed["nullable"]
+        }
+      end
+
+      if column_data_old == column_data
+        puts "COMPARE SUCCESS #{table_name}"
+      else
+        puts "COMPARE FAILED #{table_name}"
+        old_columns = column_data_old.to_a - column_data.to_a
+        new_columns = column_data.to_a - column_data_old.to_a
+        old_columns.map do |old_column|
+          new_column = new_columns.find { |test_column| test_column[:column_name] == old_column[:column_name] }
+          puts("#{old_column} > #{(new_column ? new_column.to_a - old_column.to_a : new_column)}")
+        end
+      end
 
       column_data
     end
@@ -149,12 +227,12 @@ module ODBCAdapter
       result = retrieve_column_data(table_name)
 
       result.each_with_object([]) do |col, cols|
-        col_name        = col["column_name"]
-        col_default     = extract_value_from_default(col["column_default"])
-        col_native_type = col["data_type"]
-        col_limit       = col["column_size"]
-        col_scale       = col["numeric_scale"]
-        col_nullable    = col["is_nullable"]
+        col_name        = col[:column_name]
+        col_default     = col[:col_default]
+        col_native_type = col[:col_native_type]
+        col_limit       = col[:column_size]
+        col_scale       = col[:numeric_scale]
+        col_nullable    = col[:is_nullable]
 
         args = { sql_type: construct_sql_type(col_native_type, col_limit, col_scale), type: col_native_type, limit: col_limit }
         args[:type] = case col_native_type
