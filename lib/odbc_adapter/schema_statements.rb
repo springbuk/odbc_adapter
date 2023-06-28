@@ -62,129 +62,7 @@ module ODBCAdapter
       end
     end
 
-    def columns_test()
-      tables_query = <<~SQL
-        SELECT TABLE_NAME
-        FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_CATALOG = CURRENT_DATABASE() AND TABLE_SCHEMA = CURRENT_SCHEMA()
-      SQL
-      table_list = exec_query(tables_query)
-      ActiveRecord::Base.logger.debug("Retrieving columns for #{table_list.length} tables")
-      table_list.map.with_index do |record, index|
-        ActiveRecord::Base.logger.debug("Retrieving columns for #{record["table_name"]}, #{index+1} of #{table_list.length}")
-        columns(record["table_name"])
-      end
-      nil
-    end
-
-    # Extracts the value from a Snowflake column default definition.
-    def extract_default_from_snowflake(default)
-      case default
-        # null
-      when nil
-        nil
-        # Quoted strings
-      when /\A[(B]?'(.*)'\z/m
-        $1.gsub("''", "'").gsub("\\\\","\\")
-        # Boolean types
-      when "TRUE"
-        "true"
-      when "FALSE"
-        "false"
-        # Numeric types
-      when /\A(-?\d+(\.\d*)?)\z/
-        $1
-      else
-        nil
-      end
-    end
-
-    def extract_data_type_from_snowflake(snowflake_data_type)
-      case snowflake_data_type
-      when "NUMBER"
-        "DECIMAL"
-      when /\ATIMESTAMP_.*/
-        "TIMESTAMP"
-      when "TEXT"
-        "VARCHAR"
-      when "FLOAT"
-        "DOUBLE"
-      when "FIXED"
-        "DECIMAL"
-      when "REAL"
-        "DOUBLE"
-      else
-        snowflake_data_type
-      end
-    end
-
-    def extract_column_size_from_snowflake(type_information)
-      case type_information["type"]
-      when /\ATIMESTAMP_.*/
-        35
-      when "DATE"
-        10
-      when "FLOAT"
-        38
-      when "REAL"
-        38
-      when "BOOLEAN"
-        1
-      else
-        type_information["length"] || type_information["precision"] || 0
-      end
-    end
-
-    def extract_scale_from_snowflake(type_information)
-      type_information["scale"] || 0
-    end
-
     def retrieve_column_data(table_name)
-      column_query = <<~SQL
-        SELECT TABLE_CATALOG,
-        TABLE_SCHEMA,
-        TABLE_NAME,
-        COLUMN_NAME,
-        COLUMN_DEFAULT,
-        CASE
-          WHEN DATA_TYPE = 'NUMBER' THEN 'DECIMAL'
-          WHEN DATA_TYPE like 'TIMESTAMP_%' THEN 'TIMESTAMP'
-          WHEN DATA_TYPE = 'TEXT' THEN 'VARCHAR'
-          WHEN DATA_TYPE = 'FLOAT' THEN 'DOUBLE'
-          ELSE DATA_TYPE
-        END AS DATA_TYPE,
-        CASE
-          WHEN DATA_TYPE like 'TIMESTAMP_%' THEN 35
-          WHEN DATA_TYPE = 'DATE' THEN 10
-          WHEN DATA_TYPE = 'FLOAT' THEN 38
-          WHEN DATA_TYPE = 'BOOLEAN' THEN 1
-          ELSE COALESCE(CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, 0)
-        END AS COLUMN_SIZE,
-        CASE
-          WHEN DATA_TYPE like 'TIMESTAMP_%' THEN DATETIME_PRECISION
-          ELSE COALESCE(NUMERIC_SCALE, 0)
-        END AS NUMERIC_SCALE,
-        IS_NULLABLE = 'YES' AS IS_NULLABLE
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_CATALOG = CURRENT_DATABASE() AND TABLE_SCHEMA = CURRENT_SCHEMA() AND TABLE_NAME = #{quote(native_case(table_name))}
-        ORDER BY ORDINAL_POSITION
-      SQL
-
-      query_results_old = ActiveRecord::Base.logger.silence do
-        exec_query(column_query)
-      end
-
-      column_data_old = query_results_old.map do |query_result|
-        {
-          column_name: query_result["column_name"],
-          col_default: extract_default_from_snowflake(query_result["column_default"]),
-          col_native_type: query_result["data_type"],
-          column_size: query_result["column_size"],
-          numeric_scale: query_result["numeric_scale"],
-          is_nullable: query_result["is_nullable"]
-        }
-      end
-
       column_query = "SHOW COLUMNS IN TABLE #{native_case(table_name)}"
 
       # Temporarily disable debug logging so we don't spam the log with table column queries
@@ -202,18 +80,6 @@ module ODBCAdapter
           numeric_scale: extract_scale_from_snowflake(data_type_parsed),
           is_nullable: data_type_parsed["nullable"]
         }
-      end
-
-      if column_data_old == column_data
-        puts "COMPARE SUCCESS #{table_name}"
-      else
-        puts "COMPARE FAILED #{table_name}"
-        old_columns = column_data_old.to_a - column_data.to_a
-        new_columns = column_data.to_a - column_data_old.to_a
-        old_columns.map do |old_column|
-          new_column = new_columns.find { |test_column| test_column[:column_name] == old_column[:column_name] }
-          puts("#{old_column} > #{(new_column ? new_column.to_a - old_column.to_a : new_column)}")
-        end
       end
 
       column_data
@@ -332,6 +198,70 @@ module ODBCAdapter
       else
         native_type
       end
+    end
+
+    private
+
+    # Extracts the value from a Snowflake column default definition.
+    def extract_default_from_snowflake(default)
+      case default
+        # null
+      when nil
+        nil
+        # Quoted strings
+      when /\A[(B]?'(.*)'\z/m
+        $1.gsub("''", "'").gsub("\\\\","\\")
+        # Boolean types
+      when "TRUE"
+        "true"
+      when "FALSE"
+        "false"
+        # Numeric types
+      when /\A(-?\d+(\.\d*)?)\z/
+        $1
+      else
+        nil
+      end
+    end
+
+    def extract_data_type_from_snowflake(snowflake_data_type)
+      case snowflake_data_type
+      when "NUMBER"
+        "DECIMAL"
+      when /\ATIMESTAMP_.*/
+        "TIMESTAMP"
+      when "TEXT"
+        "VARCHAR"
+      when "FLOAT"
+        "DOUBLE"
+      when "FIXED"
+        "DECIMAL"
+      when "REAL"
+        "DOUBLE"
+      else
+        snowflake_data_type
+      end
+    end
+
+    def extract_column_size_from_snowflake(type_information)
+      case type_information["type"]
+      when /\ATIMESTAMP_.*/
+        35
+      when "DATE"
+        10
+      when "FLOAT"
+        38
+      when "REAL"
+        38
+      when "BOOLEAN"
+        1
+      else
+        type_information["length"] || type_information["precision"] || 0
+      end
+    end
+
+    def extract_scale_from_snowflake(type_information)
+      type_information["scale"] || 0
     end
   end
 end
