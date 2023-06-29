@@ -63,7 +63,7 @@ module ODBCAdapter
     end
 
     def retrieve_column_data(table_name)
-      column_query = "SHOW COLUMNS IN TABLE #{native_case(table_name)}"
+      column_query = "SHOW COLUMNS IN TABLE #{table_name}"
 
       # Temporarily disable debug logging so we don't spam the log with table column queries
       query_results = ActiveRecord::Base.logger.silence do
