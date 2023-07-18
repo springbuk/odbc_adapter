@@ -62,27 +62,44 @@ module ODBCAdapter
       end
     end
 
+    def retrieve_column_data(table_name)
+      column_query = "SHOW COLUMNS IN TABLE #{table_name}"
+
+      # Temporarily disable debug logging so we don't spam the log with table column queries
+      query_results = ActiveRecord::Base.logger.silence do
+       exec_query(column_query)
+      end
+
+      column_data = query_results.map do |query_result|
+        data_type_parsed = JSON.parse(query_result["data_type"])
+        {
+          column_name: query_result["column_name"],
+          col_default: extract_default_from_snowflake(query_result["default"]),
+          col_native_type: extract_data_type_from_snowflake(data_type_parsed["type"]),
+          column_size: extract_column_size_from_snowflake(data_type_parsed),
+          numeric_scale: extract_scale_from_snowflake(data_type_parsed),
+          is_nullable: data_type_parsed["nullable"]
+        }
+      end
+
+      column_data
+    end
+
+
     # Returns an array of Column objects for the table specified by
     # +table_name+.
+    # This entire function has been customized for Snowflake and will not work in general.
     def columns(table_name, _name = nil)
-      stmt   = @connection.columns(native_case(table_name.to_s))
-      result = stmt.fetch_all || []
-      stmt.drop
+      result = retrieve_column_data(table_name)
 
-      db_regex = name_regex(current_database)
-      schema_regex = name_regex(current_schema)
       result.each_with_object([]) do |col, cols|
-        next unless col[0] =~ db_regex && col[1] =~ schema_regex
-        col_name        = col[3]  # SQLColumns: COLUMN_NAME
-        col_default     = col[12] # SQLColumns: COLUMN_DEF
-        col_native_type = col[5]  # SQLColumns: TYPE_NAME
-        col_limit       = col[6]  # SQLColumns: COLUMN_SIZE
-        col_scale       = col[8]  # SQLColumns: DECIMAL_DIGITS
+        col_name        = col[:column_name]
+        col_default     = col[:col_default]
+        col_native_type = col[:col_native_type]
+        col_limit       = col[:column_size]
+        col_scale       = col[:numeric_scale]
+        col_nullable    = col[:is_nullable]
 
-        # SQLColumns: IS_NULLABLE, SQLColumns: NULLABLE
-        col_nullable = nullability(col_name, col[17], col[10])
-
-        # This section has been customized for Snowflake and will not work in general.
         args = { sql_type: construct_sql_type(col_native_type, col_limit, col_scale), type: col_native_type, limit: col_limit }
         args[:type] = case col_native_type
                       when "BOOLEAN" then :boolean
@@ -108,13 +125,6 @@ module ODBCAdapter
                       end
 
         sql_type_metadata = ActiveRecord::ConnectionAdapters::SqlTypeMetadata.new(**args)
-
-        # The @connection.columns function returns empty strings for column defaults.
-        # Even when the column has a default value. This is a call to the ODBC layer
-        # with only enough Ruby to make the call happen. Replacing the empty string
-        # with nil permits Rails to set the current datetime for created_at and
-        # updated_at on model creates and updates.
-        col_default = nil if col_default == ""
 
         cols << new_column(format_case(col_name), col_default, sql_type_metadata, col_nullable, col_native_type)
       end
@@ -188,6 +198,70 @@ module ODBCAdapter
       else
         native_type
       end
+    end
+
+    private
+
+    # Extracts the value from a Snowflake column default definition.
+    def extract_default_from_snowflake(default)
+      case default
+        # null
+      when nil
+        nil
+        # Quoted strings
+      when /\A[(B]?'(.*)'\z/m
+        $1.gsub("''", "'").gsub("\\\\","\\")
+        # Boolean types
+      when "TRUE"
+        "true"
+      when "FALSE"
+        "false"
+        # Numeric types
+      when /\A(-?\d+(\.\d*)?)\z/
+        $1
+      else
+        nil
+      end
+    end
+
+    def extract_data_type_from_snowflake(snowflake_data_type)
+      case snowflake_data_type
+      when "NUMBER"
+        "DECIMAL"
+      when /\ATIMESTAMP_.*/
+        "TIMESTAMP"
+      when "TEXT"
+        "VARCHAR"
+      when "FLOAT"
+        "DOUBLE"
+      when "FIXED"
+        "DECIMAL"
+      when "REAL"
+        "DOUBLE"
+      else
+        snowflake_data_type
+      end
+    end
+
+    def extract_column_size_from_snowflake(type_information)
+      case type_information["type"]
+      when /\ATIMESTAMP_.*/
+        35
+      when "DATE"
+        10
+      when "FLOAT"
+        38
+      when "REAL"
+        38
+      when "BOOLEAN"
+        1
+      else
+        type_information["length"] || type_information["precision"] || 0
+      end
+    end
+
+    def extract_scale_from_snowflake(type_information)
+      type_information["scale"] || 0
     end
   end
 end
