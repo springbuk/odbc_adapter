@@ -80,7 +80,10 @@ module ActiveRecord
       end
       @merges = merges.reverse
       merges.uniq! do |merge|
-        primary_keys.map { |key| merge[key] }
+        # Map the primary keys to determine uniqueness. If a primary key is nil, return a new empty object to
+        # guarantee a unique value. We don't ever want to throw out records that have a nil primary key as these are
+        # new records.
+        primary_keys.map { |key| merge[key].nil? ? Object.new : merge[key] }
       end
       merges.reverse!
     end
