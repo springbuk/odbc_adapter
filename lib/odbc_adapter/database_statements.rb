@@ -32,6 +32,10 @@ module ODBCAdapter
       end
     end
 
+    def internal_exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
+      exec_query(sql, name, binds)
+    end
+
     # Executes delete +sql+ statement in the context of this connection using
     # +binds+ as the bind substitutes. +name+ is logged along with
     # the executed +sql+ statement.
