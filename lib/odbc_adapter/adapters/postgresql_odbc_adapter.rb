@@ -33,9 +33,9 @@ module ODBCAdapter
       # Returns the sequence name for a table's primary key or some other
       # specified key.
       def default_sequence_name(table_name, pk = nil)
-        serial_sequence(table_name, pk || 'id').split('.').last
+        next_sequence_value(table_name)
       rescue ActiveRecord::StatementInvalid
-        "#{table_name}_#{pk || 'id'}_seq"
+        "#{table_name}_#{'id'}_seq"
       end
 
       def sql_for_insert(sql, pk, binds)
@@ -180,13 +180,8 @@ module ODBCAdapter
         Integer(r.rows.first.first)
       end
 
-      private
-
-      def serial_sequence(table, column)
-        result = exec_query(<<-eosql, 'SCHEMA')
-          SELECT pg_get_serial_sequence('#{table}', '#{column}')
-        eosql
-        result.rows.first.first
+      def next_sequence_value(table)
+        super(table)
       end
     end
   end
