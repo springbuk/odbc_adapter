@@ -33,9 +33,9 @@ module ODBCAdapter
       # Returns the sequence name for a table's primary key or some other
       # specified key.
       def default_sequence_name(table_name, pk = nil)
-        next_sequence_value("#{table_name}_id_seq")
+        serial_sequence("#{table_name}_id_seq")
       rescue ActiveRecord::StatementInvalid
-        "#{table_name}_#{'id'}_seq"
+        "#{table_name}_#{pk || 'id'}_seq"
       end
 
       def sql_for_insert(sql, pk, binds)
@@ -180,8 +180,10 @@ module ODBCAdapter
         Integer(r.rows.first.first)
       end
 
-      def next_sequence_value(table)
-        super(table)
+      private
+
+      def serial_sequence(table_sequence_name)
+        exec_query("SELECT #{table_sequence_name}.NEXTVAL as new_id").first["new_id"]
       end
     end
   end
