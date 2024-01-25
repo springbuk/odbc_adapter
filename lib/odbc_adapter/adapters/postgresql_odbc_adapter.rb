@@ -33,7 +33,7 @@ module ODBCAdapter
       # Returns the sequence name for a table's primary key or some other
       # specified key.
       def default_sequence_name(table_name, pk = nil)
-        next_sequence_value(table_name)
+        next_sequence_value("#{table_name}_id_seq")
       rescue ActiveRecord::StatementInvalid
         "#{table_name}_#{'id'}_seq"
       end
