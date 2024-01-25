@@ -120,7 +120,7 @@ module ActiveRecord
 
       # Disconnects from the database if already connected, and establishes a
       # new connection with the database.
-      def reconnect!
+      def reconnect!(restore_transactions: false)
         disconnect!
         odbc_module = @config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
         @connection =
