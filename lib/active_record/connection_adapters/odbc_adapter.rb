@@ -135,7 +135,6 @@ module ActiveRecord
             odbc_module::Database.new.drvconnect(@config[:driver])
           end
         configure_time_options(@connection)
-        super
       end
       alias reset! reconnect!
 
