@@ -14,10 +14,17 @@ module ODBCAdapter
       end
     end
 
-    # Executes +sql+ statement in the context of this connection using
-    # +binds+ as the bind substitutes. +name+ is logged along with
-    # the executed +sql+ statement.
-    def exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
+    # Executes an INSERT query and returns the new record's ID
+    def insert(arel, name = nil, pk = nil, id_value = nil, sequence_name = nil, binds = [], returning: nil)
+      sql, binds = to_sql_and_binds(arel, binds)
+      exec_insert(sql, name, binds, pk, sequence_name, returning: returning)
+
+      return [id_value] unless returning.nil?
+
+      id_value
+    end
+
+    def internal_exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
         stmt =  @connection.run(sql)
@@ -30,10 +37,6 @@ module ODBCAdapter
         column_names = columns.keys.map { |key| format_case(key) }
         ActiveRecord::Result.new(column_names, values)
       end
-    end
-
-    def internal_exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
-      exec_query(sql, name, binds)
     end
 
     # Executes delete +sql+ statement in the context of this connection using

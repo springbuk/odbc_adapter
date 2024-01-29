@@ -109,6 +109,11 @@ module ActiveRecord
         true
       end
 
+      # ODBC adapter does not support the returning clause
+      def supports_insert_returning?
+        false
+      end
+
       # CONNECTION MANAGEMENT ====================================
 
       # Checks whether the connection to the database is still active. This
@@ -143,8 +148,8 @@ module ActiveRecord
       # Build a new column object from the given options. Effectively the same
       # as super except that it also passes in the native type.
       # rubocop:disable Metrics/ParameterLists
-      def new_column(name, default, sql_type_metadata, null, native_type = nil)
-        ::ODBCAdapter::Column.new(name, default, sql_type_metadata, null, native_type)
+      def new_column(name, default, sql_type_metadata, null, native_type = nil, auto_incremented = false)
+        ::ODBCAdapter::Column.new(name, default, sql_type_metadata, null, native_type, auto_incremented)
       end
 
       #Snowflake doesn't have a mechanism to return the primary key on inserts, it needs prefetched
@@ -167,6 +172,11 @@ module ActiveRecord
 
       def exec_merge_all(sql, name) # :nodoc:
         exec_query(sql, name)
+      end
+
+      # odbc_adapter does not support returning, so there are no return values from an insert
+      def return_value_after_insert?(column) # :nodoc:
+        column.auto_incremented
       end
 
       protected
