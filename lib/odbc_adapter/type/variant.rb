@@ -2,6 +2,10 @@ module ODBCAdapter
   module Type
     class Variant < ActiveRecord::Type::Value
 
+      def type
+        :variant
+      end
+
       def deserialize(value)
         # deserialize can contain the results of the previous serialize, rather than the database returned value
         if value.is_a? SnowflakeVariant then return value.internal_data end

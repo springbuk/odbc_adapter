@@ -178,29 +178,36 @@ module ActiveRecord
         column.auto_incremented
       end
 
-      protected
-
-      #Snowflake ODBC Adapter specific
-      def initialize_type_map(map)
-        map.register_type %r(boolean)i,               Type::Boolean.new
-        map.register_type %r(date)i,                  Type::Date.new
-        map.register_type %r(varchar)i,                Type::String.new
-        map.register_type %r(time)i,                  Type::Time.new
-        map.register_type %r(timestamp)i,              Type::DateTime.new
-        map.register_type %r(binary)i,                Type::Binary.new
-        map.register_type %r(double)i,                 Type::Float.new
-        map.register_type(%r(decimal)i) do |sql_type|
-          scale = extract_scale(sql_type)
-          if scale == 0
-            ::ODBCAdapter::Type::SnowflakeInteger.new
-          else
-            Type::Decimal.new(precision: extract_precision(sql_type), scale: scale)
+      class << self
+        private
+        #Snowflake ODBC Adapter specific
+        def initialize_type_map(map)
+          map.register_type %r(boolean)i,               Type::Boolean.new
+          map.register_type %r(date)i,                  Type::Date.new
+          map.register_type %r(varchar)i,                Type::String.new
+          map.register_type %r(time)i,                  Type::Time.new
+          map.register_type %r(timestamp)i,              Type::DateTime.new
+          map.register_type %r(binary)i,                Type::Binary.new
+          map.register_type %r(double)i,                 Type::Float.new
+          map.register_type(%r(decimal)i) do |sql_type|
+            scale = extract_scale(sql_type)
+            if scale == 0
+              ::ODBCAdapter::Type::SnowflakeInteger.new
+            else
+              Type::Decimal.new(precision: extract_precision(sql_type), scale: scale)
+            end
           end
+          map.register_type %r(struct)i,                ::ODBCAdapter::Type::SnowflakeObject.new
+          map.register_type %r(array)i,                 ::ODBCAdapter::Type::ArrayOfValues.new
+          map.register_type %r(variant)i,               ::ODBCAdapter::Type::Variant.new
         end
-        map.register_type %r(struct)i,                ::ODBCAdapter::Type::SnowflakeObject.new
-        map.register_type %r(array)i,                 ::ODBCAdapter::Type::ArrayOfValues.new
-        map.register_type %r(variant)i,               ::ODBCAdapter::Type::Variant.new
+
       end
+
+      TYPE_MAP = Type::TypeMap.new.tap { |m| initialize_type_map(m) }
+      EXTENDED_TYPE_MAPS = Concurrent::Map.new
+
+      protected
 
       # Translate an exception from the native DBMS to something usable by
       # ActiveRecord.
