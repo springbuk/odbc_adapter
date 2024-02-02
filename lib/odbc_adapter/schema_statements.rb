@@ -10,7 +10,7 @@ module ODBCAdapter
     # Returns an array of table names, for database tables visible on the
     # current connection.
     def tables(_name = nil)
-      stmt   = @connection.tables
+      stmt   = @raw_connection.tables
       result = stmt.fetch_all || []
       stmt.drop
 
@@ -31,7 +31,7 @@ module ODBCAdapter
 
     # Returns an array of indexes for the given table.
     def indexes(table_name, _name = nil)
-      stmt   = @connection.indexes(native_case(table_name.to_s))
+      stmt   = @raw_connection.indexes(native_case(table_name.to_s))
       result = stmt.fetch_all || []
       stmt.drop unless stmt.nil?
 
@@ -134,7 +134,7 @@ module ODBCAdapter
 
     # Returns just a table's primary key
     def primary_key(table_name)
-      stmt   = @connection.primary_keys(native_case(table_name.to_s))
+      stmt   = @raw_connection.primary_keys(native_case(table_name.to_s))
       result = stmt.fetch_all || []
       stmt.drop unless stmt.nil?
 
@@ -144,7 +144,7 @@ module ODBCAdapter
     end
 
     def foreign_keys(table_name)
-      stmt   = @connection.foreign_keys(native_case(table_name.to_s))
+      stmt   = @raw_connection.foreign_keys(native_case(table_name.to_s))
       result = stmt.fetch_all || []
       stmt.drop unless stmt.nil?
 
