@@ -33,19 +33,7 @@ module ODBCAdapter
       # Returns the sequence name for a table's primary key or some other
       # specified key.
       def default_sequence_name(table_name, pk = nil)
-        serial_sequence(table_name, pk || 'id').split('.').last
-      rescue ActiveRecord::StatementInvalid
         "#{table_name}_#{pk || 'id'}_seq"
-      end
-
-      def sql_for_insert(sql, pk, binds)
-        unless pk
-          table_ref = extract_table_ref_from_insert_sql(sql)
-          pk = primary_key(table_ref) if table_ref
-        end
-
-        sql = "#{sql} RETURNING #{quote_column_name(pk)}" if pk
-        [sql, binds]
       end
 
       def type_cast(value, column)
@@ -178,15 +166,6 @@ module ODBCAdapter
       def last_insert_id(sequence_name)
         r = exec_query("SELECT currval('#{sequence_name}')", 'SQL')
         Integer(r.rows.first.first)
-      end
-
-      private
-
-      def serial_sequence(table, column)
-        result = exec_query(<<-eosql, 'SCHEMA')
-          SELECT pg_get_serial_sequence('#{table}', '#{column}')
-        eosql
-        result.rows.first.first
       end
     end
   end
