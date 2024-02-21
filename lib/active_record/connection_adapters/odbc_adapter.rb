@@ -178,13 +178,6 @@ module ActiveRecord
         column.auto_incremented
       end
 
-      def transform_query(sql)
-        ActiveRecord.query_transformers.each do |transformer|
-          sql = transformer.call(sql, self)
-        end
-        sql
-      end
-
       class << self
         private
         #Snowflake ODBC Adapter specific
