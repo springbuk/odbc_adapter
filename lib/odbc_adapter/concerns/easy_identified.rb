@@ -8,17 +8,17 @@ module ODBCAdapter
       alias_method :pre_easy_identified_save!, :save!
 
       def save(**options, &block)
-        if self[:id] == :auto_generate then generate_id(true) end
+        if self.id == :auto_generate then generate_id(true) end
         pre_easy_identified_save(**options, &block)
       end
 
       def save!(**options, &block)
-        if self[:id] == :auto_generate then generate_id(true) end
+        if self.id == :auto_generate then generate_id(true) end
         pre_easy_identified_save!(**options, &block)
       end
 
       def generate_id(force_new = false)
-        if self[:id] == nil || force_new then self[:id] = retrieve_id end
+        if self.id == nil || force_new then self.id = retrieve_id end
       end
 
       private
