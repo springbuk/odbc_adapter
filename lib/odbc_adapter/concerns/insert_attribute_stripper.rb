@@ -39,12 +39,13 @@ module ODBCAdapter
           end
           temp_options = options.merge(validate: false)
           first_call_result = base_function.call(**temp_options, &block)
-          return false if first_call_result == false
-          if stripped_attributes.any?
+          if first_call_result == false
+            false
+          elsif stripped_attributes.any?
             restore_stripped_attributes(stripped_attributes)
-            return base_function.call(**options, &block)
+            base_function.call(**options, &block)
           else
-            return first_call_result
+            first_call_result
           end
         end
       end
