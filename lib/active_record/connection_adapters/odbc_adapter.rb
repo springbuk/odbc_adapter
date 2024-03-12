@@ -175,7 +175,9 @@ module ActiveRecord
 
       # odbc_adapter does not support returning, so there are no return values from an insert
       def return_value_after_insert?(column) # :nodoc:
-        column.auto_incremented
+        # If the column is an ODBC Adapter column then we can use the auto_incremented flag
+        # otherwise, fallback to the default_function
+        column.is_a?(::ODBCAdapter::Column) ? column.auto_incremented : column.auto_populated?
       end
 
       class << self
