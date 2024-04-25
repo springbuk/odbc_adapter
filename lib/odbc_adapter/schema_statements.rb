@@ -26,7 +26,14 @@ module ODBCAdapter
 
     # Returns an array of view names defined in the database.
     def views
-      []
+      views_query = "SHOW VIEWS IN SCHEMA #{current_schema}"
+
+      # Temporarily disable debug logging
+      query_results = ActiveRecord::Base.logger.silence do
+        exec_query(views_query)
+      end
+
+      query_results.map { |query_result| format_case(query_result["name"]) }
     end
 
     # Returns an array of indexes for the given table.
