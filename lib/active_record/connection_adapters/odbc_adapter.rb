@@ -16,6 +16,7 @@ require 'odbc_adapter/version'
 
 require 'odbc_adapter/type/type'
 require 'odbc_adapter/concerns/concern'
+require 'aws_secrets_manager'
 
 module ActiveRecord
   class Base
@@ -57,11 +58,49 @@ module ActiveRecord
       def odbc_conn_str_connection(config)
         attrs = config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
         odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
-        driver = odbc_module::Driver.new
-        driver.name = 'odbc'
-        driver.attrs = attrs
 
-        connection = odbc_module::Database.new.drvconnect(driver)
+        # The connection string may specify an AWS secret key id as the value of PRIV_KEY_FILE. Development environmnets typically just use a filepath of a static key file.
+        aws_secret_id = attrs['PRIV_KEY_FILE'].start_with?(Rails.root.to_s) ? nil : attrs['PRIV_KEY_FILE']
+
+        # when called from reconnect a driver may already be defined
+        driver = config[:driver] || odbc_module::Driver.new
+
+        puts "==========> odbc_connection: Building connection using connection string: #{config[:conn_str]}"
+
+        # Skip setting up the driver if it is already set (reconnect case)
+        if (!config[:driver])
+          puts "==========> NO existing driver in config, Initializing driver..."
+          driver.name = 'odbc'
+          driver.attrs = attrs
+          if aws_secret_id
+            AwsSecretsManager.configure_driver(driver, aws_secret_id)
+          end
+        end
+
+        begin
+          puts "==========> Connecting with key file: #{driver.attrs['PRIV_KEY_FILE']}"
+          # TODO:possibly add the ability to obtain a lock from the AWS Secrets Manager here so we can wrap the connect attempt in a lock
+          connection = odbc_module::Database.new.drvconnect(driver)
+        rescue odbc_module::Error => e
+          # If the connection string specifies an AWS secret key id as the value of PRIV_KEY_FILE (instead of a filepath as used in development environments)
+          # then attempt to fetch the latest private key file from AWS, serialize it and attempt to connect again. Local files are identified by a value starting with Rails.root
+          # (such as '/path/to/private_key.pem')
+          puts "==========> Handling connection error:\n#{e.class}-#{e.message}"
+          if aws_secret_id && e.message.include?("private key")
+            AwsSecretsManager.refresh_key_file(aws_secret_id)
+            puts "==========> Attempting reconnect after refresh of key file"
+            connection = odbc_module::Database.new.drvconnect(driver)
+          # TEST SCENARIO BELOW WHERE A BAD LOCAL KEY WAS SPECIFIED IN THE CONNECTION STRING
+          # elsif e.message.include?("Error loading private key file") && Rails.env.development?
+          #   driver.attrs['PRIV_KEY_FILE'] = Rails.root.join(AwsSecretsManager::KEY_FILE_LOCAL_NAME).to_s
+          #   puts "==========> Attempting reconnect with new private key file: #{driver.attrs['PRIV_KEY_FILE']}"
+          #   connection = odbc_module::Database.new.drvconnect(driver)
+          ########## END TEST SCENARIO CODE ############
+          else
+            raise e
+          end
+        end
+
         # encoding_bug indicates that the driver is using non ASCII and has the issue referenced here https://github.com/larskanis/ruby-odbc/issues/2
         [connection, config.merge(driver: driver, encoding: attrs['ENCODING'], encoding_bug: attrs['ENCODING'] == 'utf8')]
       end
@@ -127,12 +166,14 @@ module ActiveRecord
       # new connection with the database.
       def reconnect
         disconnect!
-        odbc_module = @config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
+        # odbc_module = @config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
         @raw_connection =
           if @config.key?(:dsn)
-            odbc_module.connect(@config[:dsn], @config[:username], @config[:password])
+            # odbc_module.connect(@config[:dsn], @config[:username], @config[:password])
+            odbc_dsn_connection(@config)[0]
           else
-            odbc_module::Database.new.drvconnect(@config[:driver])
+            # odbc_module::Database.new.drvconnect(@config[:driver])
+            odbc_conn_str_connection(@config)[0]
           end
         configure_time_options(@raw_connection)
       end
