@@ -22,8 +22,6 @@ class AwsSecretsManager
     private
 
     def retrieve_key_file(aws_secret_id, force: false)
-      # return if Rails.env.development?
-
       # Avoid multiple workers atempting to fetch the same key file password from the AWS Secrets Manager
       @@cache_lock.synchronize do
         if force || !File.exist?(Rails.root.join(KEY_FILE_LOCAL_NAME).to_s)
