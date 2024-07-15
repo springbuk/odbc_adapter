@@ -161,13 +161,10 @@ module ActiveRecord
       # new connection with the database.
       def reconnect
         disconnect!
-        # odbc_module = @config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
         @raw_connection =
           if @config.key?(:dsn)
-            # odbc_module.connect(@config[:dsn], @config[:username], @config[:password])
             odbc_dsn_connection(@config)[0]
           else
-            # odbc_module::Database.new.drvconnect(@config[:driver])
             odbc_conn_str_connection(@config)[0]
           end
         configure_time_options(@raw_connection)
