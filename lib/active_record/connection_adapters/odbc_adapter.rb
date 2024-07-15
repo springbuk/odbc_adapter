@@ -65,11 +65,9 @@ module ActiveRecord
         # when called from reconnect a driver may already be defined
         driver = config[:driver] || odbc_module::Driver.new
 
-        puts "==========> odbc_connection: Building connection using connection string: #{config[:conn_str]}"
-
-        # Skip setting up the driver if it is already set (reconnect case)
-        if (!config[:driver])
-          puts "==========> NO existing driver in config, Initializing driver..."
+        if (config[:driver])
+          Rails.logger.info "odbc_adapter: Reconnecting using existing driver (#{driver.name})"
+        else
           driver.name = 'odbc'
           driver.attrs = attrs
           if aws_secret_id
@@ -78,26 +76,23 @@ module ActiveRecord
         end
 
         begin
-          puts "==========> Connecting with key file: #{driver.attrs['PRIV_KEY_FILE']}"
-          # TODO:possibly add the ability to obtain a lock from the AWS Secrets Manager here so we can wrap the connect attempt in a lock
+          Rails.logger.debug "odbc_adapter: Connecting with key file: #{driver.attrs['PRIV_KEY_FILE']}"
           connection = odbc_module::Database.new.drvconnect(driver)
         rescue odbc_module::Error => e
           # If the connection string specifies an AWS secret key id as the value of PRIV_KEY_FILE (instead of a filepath as used in development environments)
           # then attempt to fetch the latest private key file from AWS, serialize it and attempt to connect again. Local files are identified by a value starting with Rails.root
           # (such as '/path/to/private_key.pem')
-          puts "==========> Handling connection error:\n#{e.class}-#{e.message}"
           if aws_secret_id && e.message.include?("private key")
-            AwsSecretsManager.refresh_key_file(aws_secret_id)
-            puts "==========> Attempting reconnect after refresh of key file"
-            connection = odbc_module::Database.new.drvconnect(driver)
-          # TEST SCENARIO BELOW WHERE A BAD LOCAL KEY WAS SPECIFIED IN THE CONNECTION STRING
-          # elsif e.message.include?("Error loading private key file") && Rails.env.development?
-          #   driver.attrs['PRIV_KEY_FILE'] = Rails.root.join(AwsSecretsManager::KEY_FILE_LOCAL_NAME).to_s
-          #   puts "==========> Attempting reconnect with new private key file: #{driver.attrs['PRIV_KEY_FILE']}"
-          #   connection = odbc_module::Database.new.drvconnect(driver)
-          ########## END TEST SCENARIO CODE ############
+            begin
+              AwsSecretsManager.refresh_key_file(aws_secret_id)
+            rescue AwsSecretsManager::AwsError => e
+              raise ActiveRecord::DatabaseConnectionError, "Unable to determine correct database credentials from AWS secret: #{e.message}"
+            else
+              Rails.logger.info "odbc_adapter: Attempting reconnect after refresh of key file"
+              connection = odbc_module::Database.new.drvconnect(driver)
+            end
           else
-            raise e
+            raise
           end
         end
 
