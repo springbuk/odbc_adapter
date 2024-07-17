@@ -42,8 +42,8 @@ module ActiveRecord
 
       # Connect using a predefined DSN.
       def odbc_dsn_connection(config)
-        username   = config[:username] ? config[:username].to_s : nil
-        password   = config[:password] ? config[:password].to_s : nil
+        username   = config[:username]&.to_s
+        password   = config[:password]&.to_s
         odbc_module = config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
         connection = odbc_module.connect(config[:dsn], username, password)
 
@@ -60,12 +60,12 @@ module ActiveRecord
         odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
 
         # The connection string may specify an AWS secret key id as the value of PRIV_KEY_FILE. Development environmnets typically just use a filepath of a static key file.
-        aws_secret_id = attrs['PRIV_KEY_FILE'].start_with?(Rails.root.to_s) ? nil : attrs['PRIV_KEY_FILE']
+        aws_secret_id = attrs['PRIV_KEY_FILE']&.start_with?(Rails.root.to_s) ? nil : attrs['PRIV_KEY_FILE']
 
         # when called from reconnect a driver may already be defined
         driver = config[:driver] || odbc_module::Driver.new
 
-        if (config[:driver])
+        if config[:driver]
           Rails.logger.info "odbc_adapter: Reconnecting using existing driver (#{driver.name})"
         else
           driver.name = 'odbc'
@@ -82,17 +82,15 @@ module ActiveRecord
           # If the connection string specifies an AWS secret key id as the value of PRIV_KEY_FILE (instead of a filepath as used in development environments)
           # then attempt to fetch the latest private key file from AWS, serialize it and attempt to connect again. Local files are identified by a value starting with Rails.root
           # (such as '/path/to/private_key.pem')
-          if aws_secret_id && e.message.include?("private key")
-            begin
-              AwsSecretsManager.refresh_key_file(aws_secret_id)
-            rescue AwsSecretsManager::AwsError => e
-              raise ActiveRecord::DatabaseConnectionError, "Unable to determine correct database credentials from AWS secret: #{e.message}"
-            else
-              Rails.logger.info "odbc_adapter: Attempting reconnect after refresh of key file"
-              connection = odbc_module::Database.new.drvconnect(driver)
-            end
+          raise unless aws_secret_id && e.message.include?('private key')
+
+          begin
+            AwsSecretsManager.refresh_key_file(aws_secret_id)
+          rescue AwsSecretsManager::AwsError => e
+            raise ActiveRecord::DatabaseConnectionError, "Unable to determine correct database credentials from AWS secret: #{e.message}"
           else
-            raise
+            Rails.logger.info 'odbc_adapter: Attempting reconnect after refresh of key file'
+            connection = odbc_module::Database.new.drvconnect(driver)
           end
         end
 

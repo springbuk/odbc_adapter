@@ -1,9 +1,10 @@
 # frozen_string_literal: true
+
 require 'aws-sdk-secretsmanager'
 
 class AwsSecretsManager
   @@cache_lock = Mutex.new
-  KEY_FILE_LOCAL_NAME = 'aws_snowflake.pem'.freeze
+  KEY_FILE_LOCAL_NAME = 'aws_snowflake.pem'
 
   class AwsError < StandardError
   end
