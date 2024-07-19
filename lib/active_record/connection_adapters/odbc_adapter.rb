@@ -16,7 +16,7 @@ require 'odbc_adapter/version'
 
 require 'odbc_adapter/type/type'
 require 'odbc_adapter/concerns/concern'
-require 'aws_secrets_manager'
+require 'odbc_adapter/connect_common'
 
 module ActiveRecord
   class Base
@@ -27,75 +27,15 @@ module ActiveRecord
 
         connection, config =
           if config.key?(:dsn)
-            odbc_dsn_connection(config)
+            ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(config)
           elsif config.key?(:conn_str)
-            odbc_conn_str_connection(config)
+            ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(config)
           else
             raise ArgumentError, 'No data source name (:dsn) or connection string (:conn_str) specified.'
           end
 
         database_metadata = ::ODBCAdapter::DatabaseMetadata.new(connection, config[:encoding_bug])
         database_metadata.adapter_class.new(connection, logger, config, database_metadata)
-      end
-
-      private
-
-      # Connect using a predefined DSN.
-      def odbc_dsn_connection(config)
-        username   = config[:username]&.to_s
-        password   = config[:password]&.to_s
-        odbc_module = config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
-        connection = odbc_module.connect(config[:dsn], username, password)
-
-        # encoding_bug indicates that the driver is using non ASCII and has the issue referenced here https://github.com/larskanis/ruby-odbc/issues/2
-        [connection, config.merge(username: username, password: password, encoding_bug: config[:encoding] == 'utf8')]
-      end
-
-      # Connect using ODBC connection string
-      # Supports DSN-based or DSN-less connections
-      # e.g. "DSN=virt5;UID=rails;PWD=rails"
-      #      "DRIVER={OpenLink Virtuoso};HOST=carlmbp;UID=rails;PWD=rails"
-      def odbc_conn_str_connection(config)
-        attrs = config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
-        odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
-
-        # The connection string may specify an AWS secret key id as the value of PRIV_KEY_FILE. Development environmnets typically just use a filepath of a static key file.
-        aws_secret_id = attrs['PRIV_KEY_FILE']&.start_with?(Rails.root.to_s) ? nil : attrs['PRIV_KEY_FILE']
-
-        # when called from reconnect a driver may already be defined
-        driver = config[:driver] || odbc_module::Driver.new
-
-        if config[:driver]
-          Rails.logger.info "odbc_adapter: Reconnecting using existing driver (#{driver.name})"
-        else
-          driver.name = 'odbc'
-          driver.attrs = attrs
-          if aws_secret_id
-            AwsSecretsManager.configure_driver(driver, aws_secret_id)
-          end
-        end
-
-        begin
-          Rails.logger.debug "odbc_adapter: Connecting with key file: #{driver.attrs['PRIV_KEY_FILE']}"
-          connection = odbc_module::Database.new.drvconnect(driver)
-        rescue odbc_module::Error => e
-          # If the connection string specifies an AWS secret key id as the value of PRIV_KEY_FILE (instead of a filepath as used in development environments)
-          # then attempt to fetch the latest private key file from AWS, serialize it and attempt to connect again. Local files are identified by a value starting with Rails.root
-          # (such as '/path/to/private_key.pem')
-          raise unless aws_secret_id && e.message.include?('private key')
-
-          begin
-            AwsSecretsManager.refresh_key_file(aws_secret_id)
-          rescue AwsSecretsManager::AwsError => e
-            raise ActiveRecord::DatabaseConnectionError, "Unable to determine correct database credentials from AWS secret: #{e.message}"
-          else
-            Rails.logger.info 'odbc_adapter: Attempting reconnect after refresh of key file'
-            connection = odbc_module::Database.new.drvconnect(driver)
-          end
-        end
-
-        # encoding_bug indicates that the driver is using non ASCII and has the issue referenced here https://github.com/larskanis/ruby-odbc/issues/2
-        [connection, config.merge(driver: driver, encoding: attrs['ENCODING'], encoding_bug: attrs['ENCODING'] == 'utf8')]
       end
     end
   end
@@ -161,9 +101,9 @@ module ActiveRecord
         disconnect!
         @raw_connection =
           if @config.key?(:dsn)
-            odbc_dsn_connection(@config)[0]
+            ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(@config)[0]
           else
-            odbc_conn_str_connection(@config)[0]
+            ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(@config)[0]
           end
         configure_time_options(@raw_connection)
       end
@@ -182,7 +122,7 @@ module ActiveRecord
         ::ODBCAdapter::Column.new(name, default, sql_type_metadata, null, native_type, auto_incremented)
       end
 
-      #Snowflake doesn't have a mechanism to return the primary key on inserts, it needs prefetched
+      # Snowflake doesn't have a mechanism to return the primary key on inserts, it needs prefetched
       def prefetch_primary_key?(table_name = nil)
         true
       end
@@ -213,7 +153,8 @@ module ActiveRecord
 
       class << self
         private
-        #Snowflake ODBC Adapter specific
+
+        # Snowflake ODBC Adapter specific
         def initialize_type_map(map)
           map.register_type %r(boolean)i,               Type::Boolean.new
           map.register_type %r(date)i,                  Type::Date.new
@@ -234,7 +175,6 @@ module ActiveRecord
           map.register_type %r(array)i,                 ::ODBCAdapter::Type::ArrayOfValues.new
           map.register_type %r(variant)i,               ::ODBCAdapter::Type::Variant.new
         end
-
       end
 
       TYPE_MAP = Type::TypeMap.new.tap { |m| initialize_type_map(m) }
