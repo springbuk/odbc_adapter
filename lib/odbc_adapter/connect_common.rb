@@ -55,7 +55,7 @@ module ODBCAdapter
           rescue AwsSecretsManager::AwsError => e
             raise ActiveRecord::DatabaseConnectionError, "Unable to determine correct database credentials from AWS secret: #{e.message}"
           else
-            Rails.logger.info 'odbc_adapter: Attempting reconnect after refresh of key file'
+            Rails.logger.warn 'odbc_adapter: Attempting reconnect after refresh of key file'
             connection = odbc_module::Database.new.drvconnect(driver)
           end
         end
