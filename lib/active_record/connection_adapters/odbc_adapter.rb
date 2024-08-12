@@ -16,6 +16,7 @@ require 'odbc_adapter/version'
 
 require 'odbc_adapter/type/type'
 require 'odbc_adapter/concerns/concern'
+require 'odbc_adapter/connect_common'
 
 module ActiveRecord
   class Base
@@ -26,44 +27,15 @@ module ActiveRecord
 
         connection, config =
           if config.key?(:dsn)
-            odbc_dsn_connection(config)
+            ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(config)
           elsif config.key?(:conn_str)
-            odbc_conn_str_connection(config)
+            ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(config)
           else
             raise ArgumentError, 'No data source name (:dsn) or connection string (:conn_str) specified.'
           end
 
         database_metadata = ::ODBCAdapter::DatabaseMetadata.new(connection, config[:encoding_bug])
         database_metadata.adapter_class.new(connection, logger, config, database_metadata)
-      end
-
-      private
-
-      # Connect using a predefined DSN.
-      def odbc_dsn_connection(config)
-        username   = config[:username] ? config[:username].to_s : nil
-        password   = config[:password] ? config[:password].to_s : nil
-        odbc_module = config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
-        connection = odbc_module.connect(config[:dsn], username, password)
-
-        # encoding_bug indicates that the driver is using non ASCII and has the issue referenced here https://github.com/larskanis/ruby-odbc/issues/2
-        [connection, config.merge(username: username, password: password, encoding_bug: config[:encoding] == 'utf8')]
-      end
-
-      # Connect using ODBC connection string
-      # Supports DSN-based or DSN-less connections
-      # e.g. "DSN=virt5;UID=rails;PWD=rails"
-      #      "DRIVER={OpenLink Virtuoso};HOST=carlmbp;UID=rails;PWD=rails"
-      def odbc_conn_str_connection(config)
-        attrs = config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
-        odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
-        driver = odbc_module::Driver.new
-        driver.name = 'odbc'
-        driver.attrs = attrs
-
-        connection = odbc_module::Database.new.drvconnect(driver)
-        # encoding_bug indicates that the driver is using non ASCII and has the issue referenced here https://github.com/larskanis/ruby-odbc/issues/2
-        [connection, config.merge(driver: driver, encoding: attrs['ENCODING'], encoding_bug: attrs['ENCODING'] == 'utf8')]
       end
     end
   end
@@ -127,12 +99,11 @@ module ActiveRecord
       # new connection with the database.
       def reconnect
         disconnect!
-        odbc_module = @config[:encoding] == 'utf8' ? ODBC_UTF8 : ODBC
         @raw_connection =
           if @config.key?(:dsn)
-            odbc_module.connect(@config[:dsn], @config[:username], @config[:password])
+            ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(@config)[0]
           else
-            odbc_module::Database.new.drvconnect(@config[:driver])
+            ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(@config)[0]
           end
         configure_time_options(@raw_connection)
       end
@@ -151,7 +122,7 @@ module ActiveRecord
         ::ODBCAdapter::Column.new(name, default, sql_type_metadata, null, native_type, auto_incremented)
       end
 
-      #Snowflake doesn't have a mechanism to return the primary key on inserts, it needs prefetched
+      # Snowflake doesn't have a mechanism to return the primary key on inserts, it needs prefetched
       def prefetch_primary_key?(table_name = nil)
         true
       end
@@ -182,7 +153,8 @@ module ActiveRecord
 
       class << self
         private
-        #Snowflake ODBC Adapter specific
+
+        # Snowflake ODBC Adapter specific
         def initialize_type_map(map)
           map.register_type %r(boolean)i,               Type::Boolean.new
           map.register_type %r(date)i,                  Type::Date.new
@@ -203,7 +175,6 @@ module ActiveRecord
           map.register_type %r(array)i,                 ::ODBCAdapter::Type::ArrayOfValues.new
           map.register_type %r(variant)i,               ::ODBCAdapter::Type::Variant.new
         end
-
       end
 
       TYPE_MAP = Type::TypeMap.new.tap { |m| initialize_type_map(m) }
