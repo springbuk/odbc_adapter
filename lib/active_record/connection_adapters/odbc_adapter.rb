@@ -58,6 +58,8 @@ module ActiveRecord
       ERR_QUERY_TIMED_OUT_MESSAGE                 = /Query has timed out/
       ERR_CONNECTION_FAILED_REGEX                 = '^08[0S]0[12347]'.freeze
       ERR_CONNECTION_FAILED_MESSAGE               = /Client connection failed/
+      ERR_CONNECTION_UNAUTHENTICATED_MESSAGE      = /Authentication token has expired\.  The user must authenticate again\./
+      ERR_SESSION_TIMOUT = /Session no longer exists\. New login required to access the service\./
 
       # The object that stores the information that is fetched from the DBMS
       # when a connection is first established.
@@ -198,6 +200,10 @@ module ActiveRecord
           rescue => e
             puts "unable to reconnect #{e}"
           end
+        elsif exception.message.match(ERR_CONNECTION_UNAUTHENTICATED_MESSAGE) || exception.message.match(ERR_SESSION_TIMOUT)
+          Rails.logger.warn 'ODBCAdapter: Authentication token has expired. Attempting to reconnect.'
+          reconnect!
+          @raw_connection.run(sql)
         else
           super
         end

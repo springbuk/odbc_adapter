@@ -30,6 +30,17 @@ module ODBCAdapter
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
         stmt =  @raw_connection.run(sql)
+        # begin
+        #   stmt =  @raw_connection.run(sql)
+        # rescue ODBCAdapter::Error => e
+        #   if e.message.include?('Authentication token has expired.')
+        #     Rails.logger.warn 'ODBCAdapter: Authentication token has expired. Attempting to reconnect.'
+        #     reconnect!
+        #     stmt = @raw_connection.run(sql)
+        #   else
+        #     raise e
+        #   end
+        # end
 
         columns = stmt.columns
         values  = stmt.to_a
