@@ -29,7 +29,9 @@ module ODBCAdapter
       sql = transform_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
+        Rails.logger.debug 'ODBCAdapter: Executing run SQL statement'
         stmt =  @raw_connection.run(sql)
+        Rails.logger.debug 'ODBCAdapter: Successfully executed run SQL statement'
         # begin
         #   stmt =  @raw_connection.run(sql)
         # rescue ODBCAdapter::Error => e

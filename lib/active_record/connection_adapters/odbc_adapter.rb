@@ -188,6 +188,7 @@ module ActiveRecord
       # ActiveRecord.
       def translate_exception(exception, message:, sql:, binds:)
         error_number = exception.message[/^\d+/].to_i
+        Rails.logger.debug 'ODBCAdapter: hit translate_exception with message #{exception.message}' 
 
         if error_number == ERR_DUPLICATE_KEY_VALUE
           ActiveRecord::RecordNotUnique.new(message, sql: sql, binds: binds)
