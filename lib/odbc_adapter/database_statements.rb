@@ -5,6 +5,10 @@ module ODBCAdapter
     SQL_NULLABLE = 1
     SQL_NULLABLE_UNKNOWN = 2
 
+    # ODBC connection error messages
+    ERR_CONNECTION_UNAUTHENTICATED_MESSAGE = /Authentication token has expired\.  The user must authenticate again\./
+    ERR_SESSION_TIMOUT = /Session no longer exists\. New login required to access the service\./
+
     # Executes the SQL statement in the context of this connection.
     # Returns the number of rows affected.
     def execute(sql, name = nil, binds = [])
