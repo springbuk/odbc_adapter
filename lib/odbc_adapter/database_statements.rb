@@ -26,14 +26,17 @@ module ODBCAdapter
     end
 
     def internal_exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
+      attrs = @config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
+      odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
+
       sql = transform_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
 
         begin
           stmt =  @raw_connection.run(sql)
-        rescue exception
-          if exception.message.match(ERR_CONNECTION_UNAUTHENTICATED_MESSAGE) || exception.message.match(ERR_SESSION_TIMOUT)
+        rescue odbc_module::Error => e
+          if e.message.match(ERR_CONNECTION_UNAUTHENTICATED_MESSAGE) || e.message.match(ERR_SESSION_TIMOUT)
             Rails.logger.warn 'ODBCAdapter: Session or authentication has expired. Attempting to reconnect.'
             reconnect!
             stmt = @raw_connection.run(sql)
