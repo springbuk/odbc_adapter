@@ -40,10 +40,9 @@ module ODBCAdapter
         begin
           stmt =  @raw_connection.run(sql)
         rescue odbc_module::Error => e
-          Rails.logger.debug "ODBCAdapter: Rescued odbc_module error - #{e.message}"
-        rescue StandardError => e
-          Rails.logger.debug "ODBCAdapter: Rescued StandardError - #{e.message}"
-          if e.message.match(ERR_CONNECTION_UNAUTHENTICATED_MESSAGE) || e.message.match(ERR_SESSION_TIMOUT)
+          Rails.logger.debug "ODBCAdapter: Rescued odbc_module cause - #{e.cause}"
+          Rails.logger.debug "ODBCAdapter: Rescued odbc_module cause.message - #{e.cause.message}"
+          if e.cause.message.match(ERR_CONNECTION_UNAUTHENTICATED_MESSAGE) || e.cause.message.match(ERR_SESSION_TIMOUT)
             Rails.logger.warn 'ODBCAdapter: Session or authentication has expired. Attempting to reconnect.'
             reconnect!
             stmt = @raw_connection.run(sql)
