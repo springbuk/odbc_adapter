@@ -6,8 +6,8 @@ module ODBCAdapter
     SQL_NULLABLE_UNKNOWN = 2
 
     # ODBC connection error messages
-    ERR_CONNECTION_UNAUTHENTICATED_MESSAGE = /Authentication token has expired\.  The user must authenticate again\./
-    ERR_SESSION_TIMOUT = /Session no longer exists\. New login required to access the service\./
+    ERR_CONNECTION_AUTHENTICATION_EXPIRED = /Authentication token has expired\. The user must authenticate again\./
+    ERR_SESSION_NO_LONGER_EXISTS = /Session no longer exists\. New login required to access the service\./
 
     # Executes the SQL statement in the context of this connection.
     # Returns the number of rows affected.
@@ -40,9 +40,9 @@ module ODBCAdapter
         begin
           stmt =  @raw_connection.run(sql)
         rescue odbc_module::Error => e
-          Rails.logger.debug "ODBCAdapter: Rescued odbc_module cause - #{e.cause}"
-          Rails.logger.debug "ODBCAdapter: Rescued odbc_module cause.message - #{e.cause.message}"
-          if e.cause.message.match(ERR_CONNECTION_UNAUTHENTICATED_MESSAGE) || e.cause.message.match(ERR_SESSION_TIMOUT)
+          msg = e.message.gsub(/\s+/, " ")
+
+          if msg.match(ERR_CONNECTION_AUTHENTICATION_EXPIRED) || msg.match(ERR_SESSION_NO_LONGER_EXISTS)
             Rails.logger.warn 'ODBCAdapter: Session or authentication has expired. Attempting to reconnect.'
             reconnect!
             stmt = @raw_connection.run(sql)
