@@ -53,12 +53,6 @@ module ActiveRecord
       DATE_TYPE = 'DATE'.freeze
       JSON_TYPE = 'JSON'.freeze
 
-      ERR_DUPLICATE_KEY_VALUE                     = 23_505
-      ERR_QUERY_TIMED_OUT                         = 57_014
-      ERR_QUERY_TIMED_OUT_MESSAGE                 = /Query has timed out/
-      ERR_CONNECTION_FAILED_REGEX                 = '^08[0S]0[12347]'.freeze
-      ERR_CONNECTION_FAILED_MESSAGE               = /Client connection failed/
-
       # The object that stores the information that is fetched from the DBMS
       # when a connection is first established.
       attr_reader :database_metadata
@@ -179,29 +173,6 @@ module ActiveRecord
 
       TYPE_MAP = Type::TypeMap.new.tap { |m| initialize_type_map(m) }
       EXTENDED_TYPE_MAPS = Concurrent::Map.new
-
-      protected
-
-      # Translate an exception from the native DBMS to something usable by
-      # ActiveRecord.
-      def translate_exception(exception, message:, sql:, binds:)
-        error_number = exception.message[/^\d+/].to_i
-
-        if error_number == ERR_DUPLICATE_KEY_VALUE
-          ActiveRecord::RecordNotUnique.new(message, sql: sql, binds: binds)
-        elsif error_number == ERR_QUERY_TIMED_OUT || exception.message =~ ERR_QUERY_TIMED_OUT_MESSAGE
-          ::ODBCAdapter::QueryTimeoutError.new(message, sql: sql, binds: binds)
-        elsif exception.message.match(ERR_CONNECTION_FAILED_REGEX) || exception.message =~ ERR_CONNECTION_FAILED_MESSAGE
-          begin
-            reconnect!
-            ::ODBCAdapter::ConnectionFailedError.new(message, sql: sql, binds: binds)
-          rescue => e
-            puts "unable to reconnect #{e}"
-          end
-        else
-          super
-        end
-      end
 
       private
 

@@ -5,6 +5,10 @@ module ODBCAdapter
     SQL_NULLABLE = 1
     SQL_NULLABLE_UNKNOWN = 2
 
+    # ODBC connection error messages
+    ERR_CONNECTION_AUTHENTICATION_EXPIRED = /Authentication token has expired\. The user must authenticate again\./
+    ERR_SESSION_NO_LONGER_EXISTS = /Session no longer exists\. New login required to access the service\./
+
     # Executes the SQL statement in the context of this connection.
     # Returns the number of rows affected.
     def execute(sql, name = nil, binds = [])
@@ -26,10 +30,26 @@ module ODBCAdapter
     end
 
     def internal_exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
+      attrs = @config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
+      odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
+
       sql = transform_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
-        stmt =  @raw_connection.run(sql)
+
+        begin
+          stmt =  @raw_connection.run(sql)
+        rescue odbc_module::Error => e
+          msg = e.message.gsub(/\s+/, " ")
+
+          if msg.match(ERR_CONNECTION_AUTHENTICATION_EXPIRED) || msg.match(ERR_SESSION_NO_LONGER_EXISTS)
+            Rails.logger.warn 'ODBCAdapter: Session or authentication has expired. Attempting to reconnect.'
+            reconnect!
+            stmt = @raw_connection.run(sql)
+          else
+            raise e
+          end
+        end
 
         columns = stmt.columns
         values  = stmt.to_a
