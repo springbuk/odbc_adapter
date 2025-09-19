@@ -164,12 +164,15 @@ module ODBCAdapter
 
     # Returns just a table's primary key
     def primary_key(table_name)
-      stmt   = @raw_connection.primary_keys(native_case(table_name.to_s))
-      result = stmt.fetch_all || []
-      stmt.drop unless stmt.nil?
+      result = nil
+      with_raw_connection do |conn|
+        stmt   = conn.primary_keys(native_case(table_name.to_s))
+        result = stmt.fetch_all || []
+        stmt.drop unless stmt.nil?
+      end
 
       if(@config[:driver].attrs['CLIENT_METADATA_REQUEST_USE_CONNECTION_CTX'].downcase == 'true')
-        result[0][3]
+        result[0]&.[](3)
       else
         db_regex = name_regex(current_database)
         schema_regex = name_regex(current_schema)
@@ -178,9 +181,12 @@ module ODBCAdapter
     end
 
     def foreign_keys(table_name)
-      stmt   = @raw_connection.foreign_keys(native_case(table_name.to_s))
-      result = stmt.fetch_all || []
-      stmt.drop unless stmt.nil?
+      result = nil
+      with_raw_connection do |conn|
+        stmt   = conn.foreign_keys(native_case(table_name.to_s))
+        result = stmt.fetch_all || []
+        stmt.drop unless stmt.nil?
+      end
 
       db_regex = name_regex(current_database)
       schema_regex = name_regex(current_schema)
