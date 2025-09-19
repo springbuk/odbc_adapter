@@ -15,7 +15,9 @@ module ODBCAdapter
       sql = transform_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
-        @raw_connection.do(sql)
+        with_raw_connection do |conn|
+          conn.do(sql)
+        end
       end
     end
 
@@ -29,31 +31,34 @@ module ODBCAdapter
       id_value
     end
 
-    def internal_exec_query(sql, name = 'SQL', binds = [], prepare: false) # rubocop:disable Lint/UnusedMethodArgument
+    def internal_exec_query(sql, name = "SQL", binds = [], prepare: false, async: false, allow_retry: false) # rubocop:disable Lint/UnusedMethodArgument
       attrs = @config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
       odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
 
       sql = transform_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
+        columns = nil
+        values  = nil
+        with_raw_connection do |conn|
+          begin
+            stmt =  conn.run(sql)
+          rescue odbc_module::Error => e
+            msg = e.message.gsub(/\s+/, " ")
 
-        begin
-          stmt =  @raw_connection.run(sql)
-        rescue odbc_module::Error => e
-          msg = e.message.gsub(/\s+/, " ")
-
-          if msg.match(ERR_CONNECTION_AUTHENTICATION_EXPIRED) || msg.match(ERR_SESSION_NO_LONGER_EXISTS)
-            Rails.logger.warn 'ODBCAdapter: Session or authentication has expired. Attempting to reconnect.'
-            reconnect!
-            stmt = @raw_connection.run(sql)
-          else
-            raise e
+            if msg.match(ERR_CONNECTION_AUTHENTICATION_EXPIRED) || msg.match(ERR_SESSION_NO_LONGER_EXISTS)
+              Rails.logger.warn 'ODBCAdapter: Session or authentication has expired. Attempting to reconnect.'
+              reconnect!
+              stmt = conn.run(sql)
+            else
+              raise e
+            end
           end
-        end
 
-        columns = stmt.columns
-        values  = stmt.to_a
-        stmt.drop
+          columns = stmt.columns
+          values  = stmt.to_a
+          stmt.drop
+        end
 
         values = dbms_type_cast(columns.values, values)
         column_names = columns.keys.map { |key| format_case(key) }
@@ -216,7 +221,7 @@ module ODBCAdapter
     end
 
     def prepared_binds(binds)
-      binds.map(&:value_for_database).map { |bind| _type_cast(bind) }
+      binds.map(&:value_for_database).map { |bind| type_cast(bind) }
     end
   end
 end

@@ -18,9 +18,13 @@ module ODBCAdapter
     # has_encoding_bug refers to https://github.com/larskanis/ruby-odbc/issues/2 where ruby-odbc in UTF8 mode
     # returns incorrectly encoded responses to getInfo
     def initialize(connection, has_encoding_bug = false)
+      p "ODBCMetadata Initialize"
       @values = Hash[FIELDS.map do |field|
         info = connection.get_info(ODBC.const_get(field))
         info = info.encode(Encoding.default_external, 'UTF-16LE') if info.is_a?(String) && has_encoding_bug
+
+        p field
+        p info
 
         [field, info]
       end]

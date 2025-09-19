@@ -10,23 +10,39 @@ module ODBCAdapter
     # Returns an array of table names, for database tables visible on the
     # current connection.
     def tables(_name = nil)
-      stmt   = @raw_connection.tables
-      result = stmt.fetch_all || []
-      stmt.drop
-
-      db_regex = name_regex(current_database)
-      schema_regex = name_regex(current_schema)
-      result.each_with_object([]) do |row, table_names|
-        next unless row[0] =~ db_regex && row[1] =~ schema_regex
-        schema_name, table_name, table_type = row[1..3]
-        next if respond_to?(:table_filtered?) && table_filtered?(schema_name, table_type)
-        table_names << format_case(table_name)
+      result = nil
+      with_raw_connection do |conn|
+        stmt   = conn.tables
+        result = stmt.fetch_all || []
+        stmt.drop
       end
+
+      table_names = if(@config[:driver].attrs['CLIENT_METADATA_REQUEST_USE_CONNECTION_CTX'].downcase == 'true')
+        result.each_with_object([]) do |row, table_names|
+          schema_name, table_name, table_type = row[1..3]
+          next if respond_to?(:table_filtered?) && table_filtered?(schema_name, table_type)
+          table_names << format_case(table_name)
+        end
+      else
+        db_regex = name_regex(current_database)
+        p db_regex
+        schema_regex = name_regex(current_schema)
+        p schema_regex
+        table_names = result.each_with_object([]) do |row, table_names|
+          next unless row[0] =~ db_regex && row[1] =~ schema_regex
+          schema_name, table_name, table_type = row[1..3]
+          next if respond_to?(:table_filtered?) && table_filtered?(schema_name, table_type)
+          table_names << format_case(table_name)
+        end
+      end
+
+      p table_names
+      table_names
     end
 
     # Returns an array of view names defined in the database.
     def views
-      views_query = "SHOW VIEWS IN SCHEMA #{current_database}.#{current_schema}"
+      views_query = "SHOW VIEWS IN SCHEMA"
 
       # Temporarily disable debug logging
       query_results = ActiveRecord::Base.logger.silence do
@@ -42,9 +58,12 @@ module ODBCAdapter
 
     # Returns an array of indexes for the given table.
     def indexes(table_name, _name = nil)
-      stmt   = @raw_connection.indexes(native_case(table_name.to_s))
-      result = stmt.fetch_all || []
-      stmt.drop unless stmt.nil?
+      result = nil
+      with_raw_connection do |conn|
+        stmt   = conn.indexes(native_case(table_name.to_s))
+        result = stmt.fetch_all || []
+        stmt.drop unless stmt.nil?
+      end
 
       index_cols = []
       index_name = nil
@@ -149,9 +168,13 @@ module ODBCAdapter
       result = stmt.fetch_all || []
       stmt.drop unless stmt.nil?
 
-      db_regex = name_regex(current_database)
-      schema_regex = name_regex(current_schema)
-      result.reduce(nil) { |pkey, key| (key[0] =~ db_regex && key[1] =~ schema_regex) ? format_case(key[3]) : pkey }
+      if(@config[:driver].attrs['CLIENT_METADATA_REQUEST_USE_CONNECTION_CTX'].downcase == 'true')
+        result[0][3]
+      else
+        db_regex = name_regex(current_database)
+        schema_regex = name_regex(current_schema)
+        result.reduce(nil) { |pkey, key| (key[0] =~ db_regex && key[1] =~ schema_regex) ? format_case(key[3]) : pkey }
+      end
     end
 
     def foreign_keys(table_name)
