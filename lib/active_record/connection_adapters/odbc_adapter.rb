@@ -19,14 +19,6 @@ require 'odbc_adapter/concerns/concern'
 require 'odbc_adapter/connect_common'
 
 module ActiveRecord
-  class Base
-    class << self
-      # Build a new ODBC connection with the given configuration.
-      def odbc_connection(config)
-      end
-    end
-  end
-
   module ConnectionAdapters
     class ODBCAdapter < AbstractAdapter
       include ::ODBCAdapter::DatabaseLimits
