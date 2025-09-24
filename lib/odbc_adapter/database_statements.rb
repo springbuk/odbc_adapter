@@ -76,20 +76,26 @@ module ODBCAdapter
 
     # Begins the transaction (and turns off auto-committing).
     def begin_db_transaction
-      @raw_connection.autocommit = false
+      with_raw_connection do |conn|
+        conn.autocommit = false
+      end
     end
 
     # Commits the transaction (and turns on auto-committing).
     def commit_db_transaction
-      @raw_connection.commit
-      @raw_connection.autocommit = true
+      with_raw_connection do |conn|
+        conn.commit
+        conn.autocommit = true
+      end
     end
 
     # Rolls back the transaction (and turns on auto-committing). Must be
     # done if the transaction block raises an exception or returns false.
     def exec_rollback_db_transaction
-      @raw_connection.rollback
-      @raw_connection.autocommit = true
+      with_raw_connection do |conn|
+        conn.rollback
+        conn.autocommit = true
+      end
     end
 
     # Returns the default sequence name for a table.
