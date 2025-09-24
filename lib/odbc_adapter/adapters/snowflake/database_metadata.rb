@@ -6,7 +6,6 @@ module ODBCAdapter
       class DatabaseMetadata < ODBCAdapter::DatabaseMetadata
         attr_reader :values
         def initialize
-          p "SnowflakeMetadata Initialize"
           @values = {
             SQL_DBMS_NAME: 'Snowflake',
             SQL_DBMS_VER: '9.27.0',

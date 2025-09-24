@@ -25,11 +25,7 @@ module ODBCAdapter
         end
 
         def table_exists?(table_name)
-          p "In SnowflakeODBCAdapter table_exists? #{table_name}"
-          p format_case(table_name.to_s)
-          includes = tables.include?(format_case(table_name.to_s))
-          p includes
-          includes
+          tables.include?(format_case(table_name.to_s))
         end
       end
     end

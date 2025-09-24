@@ -16,7 +16,6 @@ module ODBCAdapter
 
       class << self
         def new_client(config)
-          p "SnowflakeODBCAdapter new_client"
           config = config.symbolize_keys
 
           connection, config =
@@ -42,7 +41,6 @@ module ODBCAdapter
       include ::ODBCAdapter::Adapters::Snowflake::SchemaStatements
 
       def initialize(...)
-        p "SnowflakeODBCAdapter initialize"
         super
 
         @raw_connection = nil
@@ -135,7 +133,7 @@ module ODBCAdapter
         execute("CREATE DATABASE #{quote_table_name(name)}#{option_string}")
       end
 
-      # Drops a PostgreSQL database.
+      # Drops a Snowflake database.
       #
       # Example:
       #   drop_database 'rails_development'

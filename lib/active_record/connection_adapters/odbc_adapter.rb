@@ -29,6 +29,11 @@ module ActiveRecord
 
   module ConnectionAdapters
     class ODBCAdapter < AbstractAdapter
+      include ::ODBCAdapter::DatabaseLimits
+      include ::ODBCAdapter::DatabaseStatements
+      include ::ODBCAdapter::Quoting
+      include ::ODBCAdapter::SchemaStatements
+
       ADAPTER_NAME = 'ODBC'.freeze
       BOOLEAN_TYPE = 'BOOLEAN'.freeze
       VARIANT_TYPE = 'VARIANT'.freeze
@@ -37,7 +42,6 @@ module ActiveRecord
 
       class << self
         def new_client(config)
-          p "ODBCAdapter new_client"
           config = config.symbolize_keys
 
           connection, config =
@@ -55,17 +59,11 @@ module ActiveRecord
         end
       end
 
-      include ::ODBCAdapter::DatabaseLimits
-      include ::ODBCAdapter::DatabaseStatements
-      include ::ODBCAdapter::Quoting
-      include ::ODBCAdapter::SchemaStatements
-
       # The object that stores the information that is fetched from the DBMS
       # when a connection is first established.
       attr_reader :database_metadata
 
       def initialize(...)
-        p "ODBCAdapter initialize"
         super
 
         @raw_connection = nil
@@ -97,7 +95,6 @@ module ActiveRecord
       end
 
       def connect
-        p "Connecting to #{@config[:dsn] || @config[:conn_str]}"
         @raw_connection, @config, @database_metadata = self.class.new_client(@config)
         if @config.key?(:dsn)
           ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(@config)[0]
@@ -110,7 +107,6 @@ module ActiveRecord
       # Disconnects from the database if already connected, and establishes a
       # new connection with the database.
       def reconnect
-        p "Reconnecting to #{@config[:dsn] || @config[:conn_str]}"
         disconnect!
         connect
       end
