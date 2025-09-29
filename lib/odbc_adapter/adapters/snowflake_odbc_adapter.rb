@@ -40,12 +40,6 @@ module ODBCAdapter
 
       include ::ODBCAdapter::Adapters::Snowflake::SchemaStatements
 
-      def initialize(...)
-        super
-
-        @raw_connection = nil
-      end
-
       def database_metadata
         @database_metadata ||= ::ODBCAdapter::Adapters::Snowflake::DatabaseMetadata.new
       end
