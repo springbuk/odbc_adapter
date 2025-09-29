@@ -88,11 +88,6 @@ module ActiveRecord
 
       def connect
         @raw_connection, @config, @database_metadata = self.class.new_client(@config)
-        if @config.key?(:dsn)
-          ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(@config)[0]
-        else
-          ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(@config)[0]
-        end
         configure_time_options(@raw_connection)
       end
 
