@@ -5,8 +5,7 @@ require 'odbc_adapter/adapters/snowflake/schema_statements'
 
 module ODBCAdapter
   module Adapters
-    # Overrides specific to PostgreSQL. Mostly taken from
-    # ActiveRecord::ConnectionAdapters::PostgreSQLAdapter
+    # Overrides specific to Snowflake. Mostly taken from
     class SnowflakeODBCAdapter < ActiveRecord::ConnectionAdapters::ODBCAdapter
       BOOLEAN_TYPE = 'boolean'.freeze
       PRIMARY_KEY  = 'SERIAL PRIMARY KEY'.freeze
@@ -96,29 +95,14 @@ module ODBCAdapter
         execute(tables.map { |name| "ALTER TABLE #{quote_table_name(name)} ENABLE TRIGGER ALL" }.join(';'))
       end
 
-      # Create a new PostgreSQL database. Options include <tt>:owner</tt>,
-      # <tt>:template</tt>, <tt>:encoding</tt>, <tt>:tablespace</tt>, and
-      # <tt>:connection_limit</tt> (note that MySQL uses <tt>:charset</tt>
-      # while PostgreSQL uses <tt>:encoding</tt>).
-      #
-      # Example:
-      #   create_database config[:database], config
-      #   create_database 'foo_development', encoding: 'unicode'
-      def create_database(name, options = {})
+      # Create a new database. Options can be used to specifiy a comment.
+     def create_database(name, options = {})
         options = options.reverse_merge(encoding: 'utf8')
 
-        option_string = options.symbolize_keys.sum do |key, value|
+        option_string = options.symbolize_keys.sum("") do |key, value|
           case key
-          when :owner
-            " OWNER = \"#{value}\""
-          when :template
-            " TEMPLATE = \"#{value}\""
-          when :encoding
-            " ENCODING = '#{value}'"
-          when :tablespace
-            " TABLESPACE = \"#{value}\""
-          when :connection_limit
-            " CONNECTION LIMIT = #{value}"
+          when :comment
+            " COMMENT = #{quote(value)}"
           else
             ''
           end
