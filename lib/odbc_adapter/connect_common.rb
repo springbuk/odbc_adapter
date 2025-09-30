@@ -48,6 +48,7 @@ module ODBCAdapter
           # If the connection string specifies an AWS secret key id as the value of PRIV_KEY_FILE (instead of a filepath as used in development environments)
           # then attempt to fetch the latest private key file from AWS, serialize it and attempt to connect again. Local files are identified by a value starting with Rails.root
           # (such as '/path/to/private_key.pem')
+          raise ActiveRecord::DatabaseConnectionError, "Unable to connect to database with driver #{driver}: #{e.message}" if aws_secret_id && (e.message.include?("json_not_object"))
           raise unless aws_secret_id && (e.message.include?('private key') || e.message.include?('JWT token'))
 
           begin

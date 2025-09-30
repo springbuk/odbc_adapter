@@ -19,27 +19,6 @@ require 'odbc_adapter/concerns/concern'
 require 'odbc_adapter/connect_common'
 
 module ActiveRecord
-  class Base
-    class << self
-      # Build a new ODBC connection with the given configuration.
-      def odbc_connection(config)
-        config = config.symbolize_keys
-
-        connection, config =
-          if config.key?(:dsn)
-            ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(config)
-          elsif config.key?(:conn_str)
-            ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(config)
-          else
-            raise ArgumentError, 'No data source name (:dsn) or connection string (:conn_str) specified.'
-          end
-
-        database_metadata = ::ODBCAdapter::DatabaseMetadata.new(connection, config[:encoding_bug])
-        database_metadata.adapter_class.new(connection, logger, config, database_metadata)
-      end
-    end
-  end
-
   module ConnectionAdapters
     class ODBCAdapter < AbstractAdapter
       include ::ODBCAdapter::DatabaseLimits
@@ -53,15 +32,33 @@ module ActiveRecord
       DATE_TYPE = 'DATE'.freeze
       JSON_TYPE = 'JSON'.freeze
 
+      class << self
+        def new_client(config)
+          config = config.symbolize_keys
+
+          connection, config =
+            if config.key?(:dsn)
+              ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(config)
+            elsif config.key?(:conn_str)
+              ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(config)
+            else
+              raise ArgumentError, 'No data source name (:dsn) or connection string (:conn_str) specified.'
+            end
+
+          database_metadata = ::ODBCAdapter::DatabaseMetadata.new(connection, config[:encoding_bug])
+
+          return connection, config, database_metadata
+        end
+      end
+
       # The object that stores the information that is fetched from the DBMS
       # when a connection is first established.
       attr_reader :database_metadata
 
-      def initialize(connection, logger, config, database_metadata)
-        configure_time_options(connection)
-        super(connection, logger, config)
-        @database_metadata = database_metadata
-        @raw_connection = connection
+      def initialize(...)
+        super
+
+        @raw_connection = nil
       end
 
       # Returns the human-readable name of the adapter.
@@ -86,27 +83,26 @@ module ActiveRecord
       # includes checking whether the database is actually capable of
       # responding, i.e. whether the connection isn't stale.
       def active?
-        @raw_connection.connected?
+        !@raw_connection.nil? && @raw_connection.connected?
+      end
+
+      def connect
+        @raw_connection, @config, @database_metadata = self.class.new_client(@config)
+        configure_time_options(@raw_connection)
       end
 
       # Disconnects from the database if already connected, and establishes a
       # new connection with the database.
       def reconnect
         disconnect!
-        @raw_connection =
-          if @config.key?(:dsn)
-            ::ODBCAdapter::ConnectCommon.odbc_dsn_connection(@config)[0]
-          else
-            ::ODBCAdapter::ConnectCommon.odbc_conn_str_connection(@config)[0]
-          end
-        configure_time_options(@raw_connection)
+        connect
       end
       alias reset! reconnect!
 
       # Disconnects from the database if already connected. Otherwise, this
       # method does nothing.
       def disconnect!
-        @raw_connection.disconnect if @raw_connection.connected?
+        @raw_connection.disconnect if @raw_connection&.connected?
       end
 
       # Build a new column object from the given options. Effectively the same
