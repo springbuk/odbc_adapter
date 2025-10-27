@@ -9,10 +9,18 @@ module ODBCAdapter
     ERR_CONNECTION_AUTHENTICATION_EXPIRED = /Authentication token has expired\. The user must authenticate again\./
     ERR_SESSION_NO_LONGER_EXISTS = /Session no longer exists\. New login required to access the service\./
 
+    READ_QUERY = ActiveRecord::ConnectionAdapters::AbstractAdapter.build_read_query_regexp() # :nodoc:
+    private_constant :READ_QUERY
+    def write_query?(sql) # :nodoc:
+      !READ_QUERY.match?(sql)
+    rescue ArgumentError # Invalid encoding
+      !READ_QUERY.match?(sql.b)
+    end
+
     # Executes the SQL statement in the context of this connection.
     # Returns the number of rows affected.
     def execute(sql, name = nil, binds = [])
-      sql = transform_query(sql)
+      sql = preprocess_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
         with_raw_connection do |conn|
@@ -35,7 +43,7 @@ module ODBCAdapter
       attrs = @config[:conn_str].split(';').map { |option| option.split('=', 2) }.to_h
       odbc_module = attrs['ENCODING'] == 'utf8' ? ODBC_UTF8 : ODBC
 
-      sql = transform_query(sql)
+      sql = preprocess_query(sql)
       log(sql, name) do
         sql = bind_params(binds, sql) if prepared_statements
         columns = nil
